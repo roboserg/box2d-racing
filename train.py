@@ -50,7 +50,8 @@ def train(total_timesteps):
         n_epochs=10,
         gamma=0.95,
         verbose=0,
-        tensorboard_log="./logs/"
+        tensorboard_log="./logs/",
+        device="cpu"
     )
     
     # Load latest model if available
@@ -58,10 +59,8 @@ def train(total_timesteps):
     if (latest_model):
         print(f"Loading parameters from existing model: {latest_model}")
         model.set_parameters(latest_model)
-    
-    # Setup callbacks
-    video_folder = "./videos"
-    os.makedirs(video_folder, exist_ok=True)
+    else:
+        print("No existing model found, starting from scratch.")
     
     callbacks = [
         CheckpointCallback(
@@ -69,12 +68,13 @@ def train(total_timesteps):
             save_path="./checkpoints/",
             name_prefix="racing_model"
         ),
-        VideoRecordCallback(
-            eval_env=eval_env,
-            video_folder=video_folder,
-            eval_freq=10_000,
-            n_eval_episodes=1,
-            deterministic=True
+        EvalCallback(
+            eval_env,
+            best_model_save_path="./checkpoints/",
+            log_path="./logs/",
+            eval_freq=100_00,
+            deterministic=True,
+            render=True
         )
     ]
     
@@ -91,10 +91,4 @@ def train(total_timesteps):
     eval_env.close()
 
 if __name__ == "__main__":
-    import argparse
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--timesteps", type=int, default=10_000_000,
-                      help="Total timesteps to train for")
-    
-    args = parser.parse_args()
-    train(args.timesteps)
+    train(total_timesteps=10_000_000)

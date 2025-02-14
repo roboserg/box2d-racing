@@ -79,7 +79,7 @@ class RacingEnv(gym.Env):
         
         # Create car at starting position (adjusted to use track_radius)
         start_pos = (self.track_center[0] - self.track_radius * 0.85, self.track_center[1])
-        self.car = Car(self.world, start_pos, angle=np.pi/4)  # 45 degrees in radians
+        self.car = Car(self.world, start_pos, angle=np.random.uniform(0, 2*np.pi))
         
         self.contact_listener = ContactListener(self)
         self.world.contactListener = self.contact_listener
