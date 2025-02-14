@@ -134,12 +134,39 @@ class Renderer:
         ]
         pygame.draw.polygon(self.screen, self.WHITE, front_triangle)
 
-        # Draw rays
+        # Draw rays and their distances
         if ray_endpoints:
             car_pos_screen = self.to_screen(car.get_position())
+            car_pos = car.get_position()
             for endpoint in ray_endpoints:
                 endpoint_screen = self.to_screen(endpoint)
+                # Draw the ray
                 pygame.draw.line(self.screen, self.YELLOW, car_pos_screen, endpoint_screen, 1)
+                
+                # Calculate distance
+                distance = np.sqrt(
+                    (endpoint[0] - car_pos[0])**2 +
+                    (endpoint[1] - car_pos[1])**2
+                )
+                
+                # Position the text in the middle of the ray
+                text_pos = (
+                    (car_pos_screen[0] + endpoint_screen[0]) // 2,
+                    (car_pos_screen[1] + endpoint_screen[1]) // 2
+                )
+                
+                # Render distance text
+                distance_text = f"{distance:.1f}"
+                text_surface = self.font.render(distance_text, True, self.YELLOW)
+                # Add a black outline/background for better visibility
+                text_background = self.font.render(distance_text, True, self.BLACK)
+                text_rect = text_surface.get_rect(center=text_pos)
+                
+                # Draw text with offset for outline effect
+                for dx, dy in [(-1,-1), (-1,1), (1,-1), (1,1)]:
+                    self.screen.blit(text_background, 
+                                   (text_rect.x + dx, text_rect.y + dy))
+                self.screen.blit(text_surface, text_rect)
 
         # Draw particles
         particle_surface = pygame.Surface((self.SCREEN_WIDTH, self.SCREEN_HEIGHT), pygame.SRCALPHA)
@@ -150,7 +177,9 @@ class Renderer:
         self.screen.blit(particle_surface, (0, 0))
 
         # Draw stats
-        stats_text = f"Step: {step_count} | Reward: {cumulative_reward:.1f}"
+        forward_velocity = car.get_forward_velocity().length
+        drift_active = "Yes" if car.current_action['drift'] else "No"
+        stats_text = f"Step: {step_count} | Reward: {cumulative_reward:.1f} | Speed: {forward_velocity:.1f} | Drift Key: {drift_active}"
         text_surface = self.font.render(stats_text, True, self.BLACK)
         self.screen.blit(text_surface, (10, 10))
 
