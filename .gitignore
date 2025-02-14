@@ -1,0 +1,17 @@
+# Virtual Environment
+.venv/
+venv/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Project specific
+logs/
+checkpoints/
+videos/
+
+# IDE
+.vscode/
+.idea/
