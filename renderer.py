@@ -79,7 +79,7 @@ class Renderer:
             if not p.is_alive():
                 self.particles.remove(p)
 
-    def render(self, car, outer_track, inner_track, ray_endpoints=None, mode='human', step_count=0, cumulative_reward=0.0):
+    def render(self, car, outer_track, inner_track, ray_endpoints=None, mode='human', step_count=0, cumulative_reward=0.0, show_ray_distances=False):
         if not self.isopen:
             return None
             
@@ -140,33 +140,37 @@ class Renderer:
             car_pos = car.get_position()
             for endpoint in ray_endpoints:
                 endpoint_screen = self.to_screen(endpoint)
-                # Draw the ray
-                pygame.draw.line(self.screen, self.YELLOW, car_pos_screen, endpoint_screen, 1)
+                # Draw the ray with semi-transparent red
+                ray_surface = pygame.Surface((self.SCREEN_WIDTH, self.SCREEN_HEIGHT), pygame.SRCALPHA)
+                pygame.draw.line(ray_surface, (255, 0, 0, 64), car_pos_screen, endpoint_screen, 2)
+                self.screen.blit(ray_surface, (0, 0))
                 
-                # Calculate distance
-                distance = np.sqrt(
-                    (endpoint[0] - car_pos[0])**2 +
-                    (endpoint[1] - car_pos[1])**2
-                )
-                
-                # Position the text in the middle of the ray
-                text_pos = (
-                    (car_pos_screen[0] + endpoint_screen[0]) // 2,
-                    (car_pos_screen[1] + endpoint_screen[1]) // 2
-                )
-                
-                # Render distance text
-                distance_text = f"{distance:.1f}"
-                text_surface = self.font.render(distance_text, True, self.YELLOW)
-                # Add a black outline/background for better visibility
-                text_background = self.font.render(distance_text, True, self.BLACK)
-                text_rect = text_surface.get_rect(center=text_pos)
-                
-                # Draw text with offset for outline effect
-                for dx, dy in [(-1,-1), (-1,1), (1,-1), (1,1)]:
-                    self.screen.blit(text_background, 
-                                   (text_rect.x + dx, text_rect.y + dy))
-                self.screen.blit(text_surface, text_rect)
+                # Only show distance text if enabled
+                if show_ray_distances:
+                    # Calculate distance
+                    distance = np.sqrt(
+                        (endpoint[0] - car_pos[0])**2 +
+                        (endpoint[1] - car_pos[1])**2
+                    )
+                    
+                    # Position the text in the middle of the ray
+                    text_pos = (
+                        (car_pos_screen[0] + endpoint_screen[0]) // 2,
+                        (car_pos_screen[1] + endpoint_screen[1]) // 2
+                    )
+                    
+                    # Render distance text
+                    distance_text = f"{distance:.1f}"
+                    text_surface = self.font.render(distance_text, True, self.YELLOW)
+                    # Add a black outline/background for better visibility
+                    text_background = self.font.render(distance_text, True, self.BLACK)
+                    text_rect = text_surface.get_rect(center=text_pos)
+                    
+                    # Draw text with offset for outline effect
+                    for dx, dy in [(-1,-1), (-1,1), (1,-1), (1,1)]:
+                        self.screen.blit(text_background, 
+                                       (text_rect.x + dx, text_rect.y + dy))
+                    self.screen.blit(text_surface, text_rect)
 
         # Draw particles
         particle_surface = pygame.Surface((self.SCREEN_WIDTH, self.SCREEN_HEIGHT), pygame.SRCALPHA)

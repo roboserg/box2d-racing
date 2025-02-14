@@ -51,7 +51,13 @@ def train(total_timesteps):
         gamma=0.95,
         verbose=0,
         tensorboard_log="./logs/",
-        device="cpu"
+        device="cpu",
+        policy_kwargs=dict(
+            net_arch=dict(
+                pi=[128, 128, 64],  # Deeper actor network
+                vf=[128, 128, 64]   # Deeper critic network
+            ),
+        )
     )
     
     # Load latest model if available
@@ -64,7 +70,7 @@ def train(total_timesteps):
     
     callbacks = [
         CheckpointCallback(
-            save_freq=100_000,
+            save_freq=500_000,
             save_path="./checkpoints/",
             name_prefix="racing_model"
         ),
@@ -72,7 +78,7 @@ def train(total_timesteps):
             eval_env,
             best_model_save_path="./checkpoints/",
             log_path="./logs/",
-            eval_freq=100_00,
+            eval_freq=50_000,
             deterministic=True,
             render=True
         )
@@ -81,8 +87,8 @@ def train(total_timesteps):
     # Train
     model.learn(
         total_timesteps=total_timesteps,
+        progress_bar=True,
         callback=callbacks,
-        progress_bar=True
     )
     
     # Save final model and cleanup
@@ -91,4 +97,4 @@ def train(total_timesteps):
     eval_env.close()
 
 if __name__ == "__main__":
-    train(total_timesteps=10_000_000)
+    train(total_timesteps=100_000_000)

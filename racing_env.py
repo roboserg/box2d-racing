@@ -225,7 +225,6 @@ class RacingEnv(gym.Env):
             return None
             
         if self.renderer is None:
-            # Ensure pygame is initialized before creating renderer
             if not pygame.get_init():
                 pygame.init()
             if not pygame.display.get_init():
@@ -241,7 +240,8 @@ class RacingEnv(gym.Env):
             ray_endpoints=self.ray_endpoints,
             mode=self.render_mode,
             step_count=self.step_count,
-            cumulative_reward=self.cumulative_reward
+            cumulative_reward=self.cumulative_reward,
+            show_ray_distances=False  # Set to True if you want to see distances
         )
         
         return result
