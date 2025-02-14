@@ -10,7 +10,7 @@ import sys
 def main():
     # Initialize pygame and display
     pygame.init()
-    screen = pygame.display.set_mode((800, 600))
+    screen = pygame.display.set_mode((2000, 1200))  # Updated from 800, 600
     if not screen:
         print("Could not initialize display")
         sys.exit(1)

@@ -15,9 +15,9 @@ class Renderer:
         self.screen = None
         self.clock = None
         self.isopen = True
-        self.SCREEN_WIDTH = 1200
-        self.SCREEN_HEIGHT = 800
-        self.PPM = 20.0
+        self.SCREEN_WIDTH = 2000  # Increased from 1200
+        self.SCREEN_HEIGHT = 1200  # Increased from 800
+        self.PPM = 25.0  # Increased from 20.0 to make everything bigger
         self.FPS = 60
         
         # Add track offset to center it
