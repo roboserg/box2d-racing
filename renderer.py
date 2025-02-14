@@ -57,7 +57,8 @@ class Renderer:
             pos = self.to_screen(rear_pos)
             for _ in range(2):  # Spawn multiple particles per frame
                 velocity = (random.uniform(-100, 100), random.uniform(-100, 100))
-                self.particles.append(Particle(pos, velocity))
+                # Grey particles for drifting
+                self.particles.append(Particle(pos, velocity, color=(128, 128, 128)))
         
             
         if car.is_braking():
@@ -69,8 +70,8 @@ class Renderer:
             
             for pos in [self.to_screen(rear_left), self.to_screen(rear_right)]:
                 velocity = (random.uniform(-50, 50), random.uniform(-20, 20))
-                # Red brake particles
-                self.particles.append(Particle(pos, velocity, color=(255, 50, 50)))
+                # Black particles for braking
+                self.particles.append(Particle(pos, velocity, color=(0, 0, 0)))
 
     def update_particles(self, dt):
         for p in self.particles[:]:
@@ -143,7 +144,8 @@ class Renderer:
         # Draw particles
         particle_surface = pygame.Surface((self.SCREEN_WIDTH, self.SCREEN_HEIGHT), pygame.SRCALPHA)
         for p in self.particles:
-            color = (128, 128, 128, p.alpha)  # Gray smoke
+            # Use the particle's own color instead of forcing grey
+            color = (*p.color, p.alpha)  # Convert RGB to RGBA using particle's color
             pygame.draw.circle(particle_surface, color, (int(p.x), int(p.y)), int(p.size))
         self.screen.blit(particle_surface, (0, 0))
 

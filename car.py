@@ -7,7 +7,7 @@ class Car:
         self.world = world
         self.width = 0.5   # Reduced from 1.0 meters
         self.length = 1.0  # Reduced from 2.0 meters
-        self.current_action = {'throttle': 0, 'steer': 0, 'drift': False}  # Add this line
+        self.current_action = {'throttle': 0, 'steer': 0, 'drift': False}
         
         # Create body
         self.body = self.world.CreateDynamicBody(
@@ -25,10 +25,10 @@ class Car:
         self.body.CreateFixture(**fixture_def)
         
         # Adjust physics parameters
-        self.max_drive_force = 20.0       # Reduced from 150.0
-        self.max_lateral_impulse = 6.0    # Reduced from 8.0
-        self.brake_drag_multiplier = 1.5  # Reduced from 2.0
-        self.base_drag = 0.2              # Reduced from 1.0 for longer coasting
+        self.max_drive_force = 20.0
+        self.max_lateral_impulse = 6.0
+        self.brake_drag_multiplier = 4.0  # Increased from 1.5 for stronger braking
+        self.base_drag = 0.2
 
     def get_position(self):
         return self.body.position
