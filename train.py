@@ -27,39 +27,6 @@ def find_latest_model(checkpoint_dir="./checkpoints/"):
     
     return max(steps)[1] if steps else None
 
-class VideoRecordCallback(EvalCallback):
-    def __init__(self, eval_env, video_folder, **kwargs):
-        super().__init__(eval_env, **kwargs)
-        self.video_folder = video_folder
-        
-    def _on_step(self) -> bool:
-        if self.eval_freq > 0 and self.n_calls % self.eval_freq == 0:
-            video_path = os.path.join(self.video_folder, f'eval_{self.n_calls}_steps')
-            os.makedirs(video_path, exist_ok=True)
-            
-            video_env = VecVideoRecorder(
-                self.eval_env,
-                video_path,
-                record_video_trigger=lambda step: step == 0,
-                video_length=1000,
-                name_prefix="eval"
-            )
-            
-            try:
-                # Evaluate one episode
-                reset_result = video_env.reset()
-                obs = reset_result[0] if isinstance(reset_result, tuple) else reset_result
-                done = False
-                
-                while not done:
-                    action, _ = self.model.predict(obs, deterministic=True)
-                    step_result = video_env.step(action)
-                    obs = step_result[0]
-                    done = step_result[2] or step_result[3]  # terminated or truncated
-            finally:
-                video_env.close()
-        
-        return True
 
 def train(total_timesteps):
     # Create environments
@@ -88,7 +55,7 @@ def train(total_timesteps):
     
     # Load latest model if available
     latest_model = find_latest_model()
-    if latest_model:
+    if (latest_model):
         print(f"Loading parameters from existing model: {latest_model}")
         model.set_parameters(latest_model)
     

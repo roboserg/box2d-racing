@@ -82,105 +82,84 @@ class Renderer:
         if not self.isopen:
             return None
             
-        try:
-            # Ensure pygame and font are initialized
-            self.init_pygame()
-            
-            if self.screen is None:
-                self.screen = pygame.display.set_mode((self.SCREEN_WIDTH, self.SCREEN_HEIGHT))
-                self.clock = pygame.time.Clock()
-
-            self.screen.fill(self.GRAY)
+        # Ensure pygame and font are initialized
+        self.init_pygame()
         
-            # Draw track
-            pygame.draw.lines(self.screen, self.WHITE, True,
-                             [self.to_screen(p) for p in outer_track], 5)
-            pygame.draw.lines(self.screen, self.BLACK, True,
-                             [self.to_screen(p) for p in inner_track], 5)
-            
-            # Draw car
-            car_pos = car.get_position()
-            car_angle = car.get_angle()
-            
-            # Create car polygon (adjusted for smaller size)
-            vertices = []
-            for x, y in [(-0.5, -0.25), (0.5, -0.25), (0.5, 0.25), (-0.5, 0.25)]:  # Smaller vertices
-                vertex = (
-                    car_pos[0] + x * np.cos(car_angle) - y * np.sin(car_angle),
-                    car_pos[1] + x * np.sin(car_angle) + y * np.cos(car_angle)
-                )
-                vertices.append(self.to_screen(vertex))
-            
-            # Draw car body
-            pygame.draw.polygon(self.screen, self.RED, vertices)
-            
-            # Draw wheels (adjusted for smaller car)
-            wheel_width = 0.2 * self.PPM   # Reduced from 0.4
-            wheel_length = 0.4 * self.PPM  # Reduced from 0.8
-            for wheel_x, wheel_y in [(-0.35, -0.3), (0.35, -0.3), (-0.35, 0.3), (0.35, 0.3)]:  # Adjusted positions
-                wheel_vertices = []
-                for wx, wy in [(-wheel_length/2, -wheel_width/2), 
-                             (wheel_length/2, -wheel_width/2),
-                             (wheel_length/2, wheel_width/2),
-                             (-wheel_length/2, wheel_width/2)]:
-                    vertex = (
-                        car_pos[0] + (wheel_x * np.cos(car_angle) - wheel_y * np.sin(car_angle)),
-                        car_pos[1] + (wheel_x * np.sin(car_angle) + wheel_y * np.cos(car_angle))
-                    )
-                    wheel_vertices.append(self.to_screen(vertex))
-                pygame.draw.polygon(self.screen, self.BLACK, wheel_vertices)
+        if self.screen is None:
+            self.screen = pygame.display.set_mode((self.SCREEN_WIDTH, self.SCREEN_HEIGHT))
+            self.clock = pygame.time.Clock()
 
-            # Draw front indicator (adjusted size)
-            front_center = (
-                car_pos[0] + 0.6 * np.cos(car_angle),  # Reduced from 2.2
-                car_pos[1] + 0.6 * np.sin(car_angle)
+        self.screen.fill(self.GRAY)
+    
+        # Draw track
+        pygame.draw.lines(self.screen, self.WHITE, True,
+                         [self.to_screen(p) for p in outer_track], 5)
+        pygame.draw.lines(self.screen, self.BLACK, True,
+                         [self.to_screen(p) for p in inner_track], 5)
+        
+        # Draw car
+        car_pos = car.get_position()
+        car_angle = car.get_angle()
+        
+        # Create car polygon (adjusted for smaller size)
+        vertices = []
+        for x, y in [(-0.5, -0.25), (0.5, -0.25), (0.5, 0.25), (-0.5, 0.25)]:  # Smaller vertices
+            vertex = (
+                car_pos[0] + x * np.cos(car_angle) - y * np.sin(car_angle),
+                car_pos[1] + x * np.sin(car_angle) + y * np.cos(car_angle)
             )
-            front_left = (
-                car_pos[0] + 0.5 * np.cos(car_angle) - 0.2 * np.sin(car_angle),  # Reduced from 1.8 and 0.4
-                car_pos[1] + 0.5 * np.sin(car_angle) + 0.2 * np.cos(car_angle)
-            )
-            front_right = (
-                car_pos[0] + 0.5 * np.cos(car_angle) + 0.2 * np.sin(car_angle),
-                car_pos[1] + 0.5 * np.sin(car_angle) - 0.2 * np.cos(car_angle)
-            )
-            front_triangle = [
-                self.to_screen(front_center),
-                self.to_screen(front_left),
-                self.to_screen(front_right)
-            ]
-            pygame.draw.polygon(self.screen, self.WHITE, front_triangle)
+            vertices.append(self.to_screen(vertex))
+        
+        # Draw car body
+        pygame.draw.polygon(self.screen, self.RED, vertices)
+        
+        # Draw front indicator (adjusted size)
+        front_center = (
+            car_pos[0] + 0.6 * np.cos(car_angle),  # Reduced from 2.2
+            car_pos[1] + 0.6 * np.sin(car_angle)
+        )
+        front_left = (
+            car_pos[0] + 0.5 * np.cos(car_angle) - 0.2 * np.sin(car_angle),  # Reduced from 1.8 and 0.4
+            car_pos[1] + 0.5 * np.sin(car_angle) + 0.2 * np.cos(car_angle)
+        )
+        front_right = (
+            car_pos[0] + 0.5 * np.cos(car_angle) + 0.2 * np.sin(car_angle),
+            car_pos[1] + 0.5 * np.sin(car_angle) - 0.2 * np.cos(car_angle)
+        )
+        front_triangle = [
+            self.to_screen(front_center),
+            self.to_screen(front_left),
+            self.to_screen(front_right)
+        ]
+        pygame.draw.polygon(self.screen, self.WHITE, front_triangle)
 
-            # Draw rays
-            if ray_endpoints:
-                car_pos_screen = self.to_screen(car.get_position())
-                for endpoint in ray_endpoints:
-                    endpoint_screen = self.to_screen(endpoint)
-                    pygame.draw.line(self.screen, self.YELLOW, car_pos_screen, endpoint_screen, 1)
+        # Draw rays
+        if ray_endpoints:
+            car_pos_screen = self.to_screen(car.get_position())
+            for endpoint in ray_endpoints:
+                endpoint_screen = self.to_screen(endpoint)
+                pygame.draw.line(self.screen, self.YELLOW, car_pos_screen, endpoint_screen, 1)
 
-            # Draw particles
-            particle_surface = pygame.Surface((self.SCREEN_WIDTH, self.SCREEN_HEIGHT), pygame.SRCALPHA)
-            for p in self.particles:
-                color = (128, 128, 128, p.alpha)  # Gray smoke
-                pygame.draw.circle(particle_surface, color, (int(p.x), int(p.y)), int(p.size))
-            self.screen.blit(particle_surface, (0, 0))
+        # Draw particles
+        particle_surface = pygame.Surface((self.SCREEN_WIDTH, self.SCREEN_HEIGHT), pygame.SRCALPHA)
+        for p in self.particles:
+            color = (128, 128, 128, p.alpha)  # Gray smoke
+            pygame.draw.circle(particle_surface, color, (int(p.x), int(p.y)), int(p.size))
+        self.screen.blit(particle_surface, (0, 0))
 
-            # Draw stats
-            stats_text = f"Step: {step_count} | Reward: {cumulative_reward:.1f}"
-            text_surface = self.font.render(stats_text, True, self.BLACK)
-            self.screen.blit(text_surface, (10, 10))
+        # Draw stats
+        stats_text = f"Step: {step_count} | Reward: {cumulative_reward:.1f}"
+        text_surface = self.font.render(stats_text, True, self.BLACK)
+        self.screen.blit(text_surface, (10, 10))
 
-            # Update particles
-            self.spawn_drift_particles(car)
-            self.update_particles(1.0 / self.FPS)
+        # Update particles
+        self.spawn_drift_particles(car)
+        self.update_particles(1.0 / self.FPS)
 
-            pygame.display.flip()
-            self.clock.tick(self.FPS)
-            
-            return True
-
-        except Exception as e:
-            print(f"Render error: {e}")
-            self.close()
+        pygame.display.flip()
+        self.clock.tick(self.FPS)
+        
+        return True
 
     def close(self):
         if self.screen is not None:

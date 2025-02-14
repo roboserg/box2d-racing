@@ -7,6 +7,7 @@ class Car:
         self.world = world
         self.width = 0.5   # Reduced from 1.0 meters
         self.length = 1.0  # Reduced from 2.0 meters
+        self.current_action = {'throttle': 0, 'steer': 0, 'drift': False}  # Add this line
         
         # Create body
         self.body = self.world.CreateDynamicBody(
@@ -48,11 +49,16 @@ class Car:
         steer: float [-1, 1] for right/left
         drift: bool for drift mode
         """
+        self.current_action = action  # Store the current action
         # Update friction
         right_normal = self.body.GetWorldVector(localVector=(0, 1))
         lateral_velocity = right_normal.dot(self.body.linearVelocity) * right_normal
         
-        drift_factor = 0.05 if action['drift'] else 1.0  # Reduced from 0.1
+        # Enable drift when braking or when drift button is pressed
+        is_braking = self.is_braking()
+        drift_enabled = action['drift'] or is_braking
+        drift_factor = 0.05 if drift_enabled else 1.0
+        
         impulse = -self.body.mass * lateral_velocity * drift_factor
         
         if impulse.length > self.max_lateral_impulse:
@@ -95,13 +101,14 @@ class Car:
         right_normal = self.body.GetWorldVector(localVector=(0, 1))
         lateral_speed = abs(right_normal.dot(self.body.linearVelocity))
         forward_speed = self.get_forward_velocity().length
-        return lateral_speed > 3 and forward_speed > 3  # Increased from 2
+        # Consider both manual drift and brake-induced drift
+        return (lateral_speed > 3 and forward_speed > 3) or self.is_braking()
 
     def get_forward_velocity(self):
         forward_normal = self.body.GetWorldVector(localVector=(1, 0))
         return forward_normal.dot(self.body.linearVelocity) * forward_normal
 
     def is_braking(self):
-        forward_speed = self.get_forward_velocity().length
-        return forward_speed > 1.0 and self.body.linearVelocity.dot(
-            self.body.GetWorldVector(localVector=(1, 0))) < -0.5
+        forward_normal = self.body.GetWorldVector(localVector=(1, 0))
+        forward_velocity = forward_normal.dot(self.body.linearVelocity)
+        return forward_velocity > 3.0 and self.body.linearVelocity.dot(forward_normal) > 0 and self.current_action['throttle'] < -0.5
