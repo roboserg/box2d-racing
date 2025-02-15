@@ -1,44 +1,61 @@
 import os
-import glob
-import re
 from stable_baselines3 import PPO
-from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize, VecMonitor
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.callbacks import CheckpointCallback, EvalCallback, BaseCallback
 from racing_env import RacingEnv
+from utils import find_latest_model
+import numpy as np
 
-def find_latest_model(checkpoint_dir="./checkpoints/"):
-    # Check for final model first
-    final_model = os.path.join(checkpoint_dir, "racing_model_final.zip")
-    if os.path.exists(final_model):
-        return final_model
-    
-    # Find all checkpoint files
-    files = glob.glob(os.path.join(checkpoint_dir, "racing_model_*.zip"))
-    if not files:
-        return None
-        
-    # Extract step numbers and find max
-    steps = []
-    for f in files:
-        match = re.search(r'racing_model_(\d+)_steps\.zip', f)
-        if match:
-            steps.append((int(match.group(1)), f))
-    
-    return max(steps)[1] if steps else None
+class SaveOnBestTrainingRewardCallback(BaseCallback):
+    def __init__(self, check_freq: int, save_path: str, keep_n_models: int = 5, verbose: int = 1):
+        super().__init__(verbose)
+        self.check_freq = check_freq
+        self.save_path = save_path
+        self.keep_n_models = keep_n_models
+        self.best_mean_reward = -np.inf
+        self.saved_models = []  # Keep track of saved model paths
 
+    def _init_callback(self) -> None:
+        if self.save_path is not None:
+            os.makedirs(self.save_path, exist_ok=True)
 
-def train(total_timesteps):
+    def _cleanup_old_models(self):
+        """Remove old model files keeping only the N most recent ones"""
+        while len(self.saved_models) > self.keep_n_models:
+            old_model = self.saved_models.pop(0)  # Remove oldest model
+            if os.path.exists(old_model):
+                os.remove(old_model)
+                if self.verbose > 1:
+                    print(f"Removed old model: {old_model}")
+
+    def _on_step(self) -> bool:
+        if self.n_calls % self.check_freq == 0:
+            if len(self.model.ep_info_buffer) > 0:
+                ep_info_buffer = list(self.model.ep_info_buffer)
+                last_episodes = ep_info_buffer[-min(10, len(ep_info_buffer)):]
+                ep_rew_mean = np.mean([ep_info["r"] for ep_info in last_episodes])
+
+                if self.verbose > 1:
+                    print(f"Mean reward over last {len(last_episodes)} episodes: {ep_rew_mean:.2f}, "
+                        f"best mean reward: {self.best_mean_reward:.2f}")
+                
+                if ep_rew_mean > self.best_mean_reward * 1.05:
+                    self.best_mean_reward = ep_rew_mean
+                    path = os.path.join(self.save_path, 
+                        f"{self.num_timesteps}-steps-reward-{ep_rew_mean:.1f}.zip")
+                    self.model.save(path)
+                    self.saved_models.append(path)
+                    self._cleanup_old_models()
+                    
+                    if self.verbose > 0:
+                        print(f"Step: {self.num_timesteps} - new best reward: {ep_rew_mean:.2f}. "
+                              f"Saving to {path}")
+        return True
+
+def train():
     # Create environments
-    env = DummyVecEnv([lambda: Monitor(RacingEnv())])
-    env = VecNormalize(env, norm_obs=True, norm_reward=False, clip_obs=10.)
-    
-    eval_env = DummyVecEnv([lambda: Monitor(RacingEnv(render_mode="human"))])
-    eval_env = VecNormalize(eval_env, norm_obs=True, norm_reward=False, clip_obs=10.)
-    
-    # Sync normalization stats
-    eval_env.obs_rms = env.obs_rms
-    eval_env.ret_rms = env.ret_rms
+    env = Monitor(RacingEnv())
+    eval_env = Monitor(RacingEnv(render_mode="human"))
     
     # Initialize PPO agent
     model = PPO(
@@ -46,8 +63,8 @@ def train(total_timesteps):
         env,
         learning_rate=3e-4,
         n_steps=2048,
-        batch_size=128,
-        gamma=0.95,
+        batch_size=64,
+        gamma=0.99,
         verbose=0,
         tensorboard_log="./logs/",
         device="cpu",
@@ -68,24 +85,30 @@ def train(total_timesteps):
         print("No existing model found, starting from scratch.")
     
     callbacks = [
-        CheckpointCallback(
-            save_freq=500_000,
-            save_path="./checkpoints/",
-            name_prefix="racing_model"
-        ),
         EvalCallback(
             eval_env,
             best_model_save_path="./checkpoints/",
             log_path="./logs/",
-            eval_freq=50_000,
+            eval_freq=200_000,
             deterministic=True,
-            render=True
+            render=True,
+            n_eval_episodes=3
+        ),
+        SaveOnBestTrainingRewardCallback(
+            check_freq=100_000,
+            save_path="./checkpoints/",
+            keep_n_models=1
         )
+        # CheckpointCallback(
+        #     save_freq=500_000,
+        #     save_path="./checkpoints/",
+        #     name_prefix="racing_model"
+        # ),
     ]
     
     # Train
     model.learn(
-        total_timesteps=total_timesteps,
+        total_timesteps=100_000_000,
         progress_bar=True,
         callback=callbacks,
     )
@@ -96,4 +119,4 @@ def train(total_timesteps):
     eval_env.close()
 
 if __name__ == "__main__":
-    train(total_timesteps=100_000_000)
+    train()
