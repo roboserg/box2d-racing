@@ -2,9 +2,9 @@ import os
 import glob
 import re
 from stable_baselines3 import PPO
-from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize, VecVideoRecorder
+from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize, VecMonitor
 from stable_baselines3.common.monitor import Monitor
-from stable_baselines3.common.callbacks import CheckpointCallback, EvalCallback
+from stable_baselines3.common.callbacks import CheckpointCallback, EvalCallback, BaseCallback
 from racing_env import RacingEnv
 
 def find_latest_model(checkpoint_dir="./checkpoints/"):
@@ -47,7 +47,6 @@ def train(total_timesteps):
         learning_rate=3e-4,
         n_steps=2048,
         batch_size=128,
-        n_epochs=10,
         gamma=0.95,
         verbose=0,
         tensorboard_log="./logs/",

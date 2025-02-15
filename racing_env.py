@@ -134,12 +134,11 @@ class RacingEnv(gym.Env):
         car_angle = self.car.get_angle()
         car_vel = self.car.get_linear_velocity()
         car_ang_vel = self.car.get_angular_velocity()
-        
-        # Calculate distances to track boundaries in 8 directions
         rays = self._get_ray_distances()
         
         return np.array([
-            car_pos[0], car_pos[1],
+            car_pos[0], 
+            car_pos[1],
             car_angle,
             car_vel.length,
             car_ang_vel
