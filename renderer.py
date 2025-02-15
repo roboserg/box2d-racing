@@ -185,7 +185,8 @@ class Renderer:
         drift_active = "Yes" if car.current_action['drift'] else "No"
         stats_text = f"Step: {step_count} | Reward: {cumulative_reward:.1f} | Speed: {forward_velocity:.1f} | Drift Key: {drift_active}"
         text_surface = self.font.render(stats_text, True, self.BLACK)
-        self.screen.blit(text_surface, (10, 10))
+        text_rect = text_surface.get_rect(center=(self.SCREEN_WIDTH // 2, 20))
+        self.screen.blit(text_surface, text_rect)
 
         # Update particles
         self.spawn_drift_particles(car)
