@@ -52,8 +52,8 @@ class RacingEnv(gym.Env):
         
         # Observation space: [car_x, car_y, car_angle, car_speed, car_angular_vel, distances_to_track_edges, collision_flag]
         self.observation_space = spaces.Box(
-            low=np.array([-np.inf, -np.inf, -np.pi, -50, -50] + [0]*8 + [0], dtype=np.float32),
-            high=np.array([np.inf, np.inf, np.pi, 50, 50] + [100]*8 + [1], dtype=np.float32),
+            low=np.array([-np.inf] * 13, dtype=np.float32),  # 5 car states + 7 rays + 1 collision flag
+            high=np.array([np.inf] * 13, dtype=np.float32),
         )
         
         self.world = None
@@ -101,8 +101,8 @@ class RacingEnv(gym.Env):
 
     def _generate_track(self):
         # Center the track around (0,0) in world coordinates
-        self.track_radius = 20.0  # Store as instance variable
-        num_points = 30     # Increase for smoother track
+        self.track_radius = 21.0  # Store as instance variable
+        num_points = 31     # Increase for smoother track
         
         # Set track center
         self.track_center = (0, 0)  # Track is centered at origin in world coordinates
@@ -131,21 +131,55 @@ class RacingEnv(gym.Env):
 
     def _get_observation(self):
         car_pos = self.car.get_position()
-        car_angle = self.car.get_angle()
+        car_angle = self.car.get_heading()
         car_vel = self.car.get_linear_velocity()
         car_ang_vel = self.car.get_angular_velocity()
         rays = self._get_ray_distances()
         
-        return np.array([
+        # Raw observation vector
+        observation = np.array([
             car_pos[0], 
             car_pos[1],
             car_angle,
-            car_vel.length,
+            car_vel,
             car_ang_vel
         ] + rays + [float(self.car_touched_boundary)])
+        
+        # Normalize observation
+        return self._normalize_observation(observation)
+
+    def _normalize_observation(self, obs):
+        """Normalize observation components by fixed values."""
+        # Position (x,y)
+        obs[0:2] /= 100.0
+        
+        # Angle: already in [-pi, pi], normalize to [-1, 1]
+        obs[2] /= np.pi
+        
+        # Linear velocity [-20, 20] -> [-1, 1]
+        obs[3] /= 20.0
+        
+        # Angular velocity [-5, 5] -> [-1, 1]
+        obs[4] /= 5.0
+        
+        # Ray distances
+        obs[5:12] /= 100.0
+        
+        # Collision flag is already binary (0 or 1)
+        
+        #self._print_observation_table(obs)
+        return obs
+
+    def _print_observation_table(self, observation):
+        headers = ["X", "Y", "Car Angle", "Car Speed", "Car Angular Vel"] + \
+                  [f"Ray {i+1}" for i in range(7)] + ["Collision Flag"]
+        row_format = "{:>15}" * len(headers)
+        print(row_format.format(*headers))
+        print(row_format.format(*[f"{x:.2f}" for x in observation]))
 
     def _get_ray_distances(self):
-        ray_angles = [0, np.pi/4, np.pi/2, 3*np.pi/4, np.pi, 5*np.pi/4, 3*np.pi/2, 7*np.pi/4]
+        # Ray angles from -90° to +90° relative to car's forward direction
+        ray_angles = [-np.pi/2, -np.pi/3, -np.pi/6, 0, np.pi/6, np.pi/3, np.pi/2]
         ray_length = 100.0  # Maximum ray length
         car_pos = self.car.get_position()
         car_angle = self.car.get_angle()
@@ -208,7 +242,7 @@ class RacingEnv(gym.Env):
         return obs, reward, terminated, truncated, info
 
     def _calculate_reward(self):
-        reward = self.car.get_linear_velocity().length / 1000
+        reward = self.car.get_linear_velocity() / 1000
         # Add penalty for touching boundary
         if self.car_touched_boundary:
             reward -= 1.0
