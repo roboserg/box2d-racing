@@ -27,7 +27,7 @@ class Car:
         # Adjust physics parameters
         self.max_drive_force = 20.0
         self.max_lateral_impulse = 6.0
-        self.brake_drag_multiplier = 4.0  # Increased from 1.5 for stronger braking
+        self.brake_drag_multiplier = 4.0
         self.base_drag = 0.2
 
     def get_position(self):
@@ -37,7 +37,9 @@ class Car:
         return self.body.angle
 
     def get_linear_velocity(self):
-        return self.body.linearVelocity
+        """Returns signed velocity (positive = forward, negative = backward)"""
+        forward_normal = self.body.GetWorldVector(localVector=(1, 0))
+        return forward_normal.dot(self.body.linearVelocity)
 
     def get_angular_velocity(self):
         return self.body.angularVelocity
@@ -88,14 +90,17 @@ class Car:
             # Speed-dependent steering with drift modification
             if action['drift']:
                 # During drift: tighter turns and less speed limitation
-                speed_factor = min(1.0, 12.0 / forward_speed) if forward_speed > 12.0 else 1.0
-                steer_amount = 0.035 * action['steer'] * speed_factor
+                speed_factor = min(1.0, 14.0 / forward_speed) if forward_speed > 12.0 else 1.0
+                desired_angular_velocity = -4.0 * action['steer'] * speed_factor  # Added negative sign
             else:
                 # Normal steering
-                speed_factor = min(1.0, 8.0 / forward_speed) if forward_speed > 8.0 else 1.0
-                steer_amount = 0.025 * action['steer'] * speed_factor
+                speed_factor = min(1.0, 10.0 / forward_speed) if forward_speed > 8.0 else 1.0
+                desired_angular_velocity = -3.0 * action['steer'] * speed_factor  # Added negative sign
             
-            self.body.angle -= steer_amount
+            # Apply torque to achieve desired angular velocity
+            current_angular_velocity = self.body.angularVelocity
+            torque = (desired_angular_velocity - current_angular_velocity) * self.body.mass
+            self.body.ApplyTorque(torque, True)
 
     def is_drifting(self):
         right_normal = self.body.GetWorldVector(localVector=(0, 1))
@@ -112,3 +117,8 @@ class Car:
         forward_normal = self.body.GetWorldVector(localVector=(1, 0))
         forward_velocity = forward_normal.dot(self.body.linearVelocity)
         return forward_velocity > 3.0 and self.body.linearVelocity.dot(forward_normal) > 0 and self.current_action['throttle'] < -0.5
+
+    def get_heading(self):
+        """Returns the car's heading angle in radians (0 = right, pi/2 = up)"""
+        forward_vec = self.body.GetWorldVector(localVector=(1, 0))
+        return math.atan2(forward_vec.y, forward_vec.x)
