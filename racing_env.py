@@ -100,7 +100,7 @@ class RacingEnv(gym.Env):
 
     def _calculate_reward(self):
         reward = self.car.get_linear_velocity() / 1000
-        if self.car.is_physically_drifting(): reward += 0.01  # Add bonus for drifting     
+        if self.car.is_physically_drifting(): reward += 0.001  # Add bonus for drifting     
         if self.car_touched_boundary: reward -= 1.0  # Add penalty for touching boundary
         return reward
 
