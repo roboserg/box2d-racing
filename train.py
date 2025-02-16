@@ -10,7 +10,7 @@ from config import Config
 def train():
     config = Config()
     run_dir = setup_run_dir(config)
-    env, eval_env = Monitor(RacingEnv()), Monitor(RacingEnv(render_mode="human"))
+    env, eval_env = Monitor(RacingEnv()), Monitor(RacingEnv())
     
     model = PPO(
         "MlpPolicy",
@@ -20,12 +20,17 @@ def train():
         use_sde=True,
         tensorboard_log=run_dir,
         device="cpu",
+        policy_kwargs=dict(net_arch=dict(pi=[256, 256], vf=[256, 256]))
     )
 
     print(f"Starting new training run in {run_dir}")
     if config.RESUME_FROM:
-        print(f"Using weights from: {config.RESUME_FROM}")
-        model.set_parameters(config.RESUME_FROM)
+        try:
+            print(f"Using weights from: {config.RESUME_FROM}")
+            model.set_parameters(config.RESUME_FROM)
+        except Exception as e:
+            print(f"Failed to load weights from {config.RESUME_FROM}: {str(e)}")
+            print("Starting with fresh weights instead.")
      
     callbacks = [
         EvalCallback(
