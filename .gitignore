@@ -9,7 +9,7 @@ __pycache__/
 
 # Project specific
 logs/
-checkpoints/
+checkpoints*/
 videos/
 
 # IDE
