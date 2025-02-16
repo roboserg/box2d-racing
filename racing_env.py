@@ -3,58 +3,25 @@ import gymnasium as gym
 from gymnasium import spaces
 import numpy as np
 import Box2D
-from Box2D.b2 import (world, polygonShape, edgeShape, vec2)
+from Box2D.b2 import world
 from car import Car
-
-class RayCastCallback(Box2D.b2RayCastCallback):
-    def __init__(self):
-        Box2D.b2RayCastCallback.__init__(self)
-        self.fixture = None
-        self.hit_point = None
-        self.normal = None
-        self.fraction = 1.0
-
-    def ReportFixture(self, fixture, point, normal, fraction):
-        self.fixture = fixture
-        self.hit_point = point
-        self.normal = normal
-        self.fraction = fraction
-        return fraction  # Return fraction to get closest hit
-
-    def reset(self):
-        self.fixture = None
-        self.hit_point = None
-        self.normal = None
-        self.fraction = 1.0
-
-class ContactListener(Box2D.b2ContactListener):
-    def __init__(self, env):
-        Box2D.b2ContactListener.__init__(self)
-        self.env = env
-
-    def BeginContact(self, contact):
-        if (contact.fixtureA.body == self.env.car.body or 
-            contact.fixtureB.body == self.env.car.body):
-            self.env.car_touched_boundary = True
+from track import Track
+from physics_utils import ContactListener, get_ray_distances
 
 class RacingEnv(gym.Env):
     def __init__(self, render_mode=None):
         super().__init__()
         self.render_mode = render_mode
-        self.FPS = 60  # Match with renderer FPS
+        self.FPS = 60
         
         # Action space: [throttle, steering, drift]
         self.action_space = spaces.Box(
-            low=np.array([-1, -1, 0]),
-            high=np.array([1, 1, 1]),
-            dtype=np.float32
-        )
+            low=np.array([-1, -1, 0]), high=np.array([1, 1, 1]), dtype=np.float32)
         
         # Observation space: [car_x, car_y, car_angle, car_speed, car_angular_vel, distances_to_track_edges, collision_flag]
         self.observation_space = spaces.Box(
-            low=np.array([-np.inf] * 13, dtype=np.float32),  # 5 car states + 7 rays + 1 collision flag
-            high=np.array([np.inf] * 13, dtype=np.float32),
-        )
+            low=np.array([-np.inf] * 13, dtype=np.float32),   # 5 car states + 7 rays + 1 collision flag
+            high=np.array([np.inf] * 13, dtype=np.float32))
         
         self.world = None
         self.car = None
@@ -67,150 +34,50 @@ class RacingEnv(gym.Env):
         
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
-        self.step_count = 0
-        self.cumulative_reward = 0.0
+        self.step_count = self.cumulative_reward = 0.0
         self.car_touched_boundary = False
         
-        # Create world
-        self.world = world(gravity=(0, 0), doSleep=True)
+        self.world = world(gravity=(0, 0), doSleep=True)  # Create world
+        self.track = Track(self.world)  # Create track
         
-        # Create track
-        self._create_track()
-        
-        # Create car at starting position (adjusted to use track_radius)
-        start_pos = (self.track_center[0] - self.track_radius * 0.85, self.track_center[1])
+        # Create car at starting position with random angle
+        start_pos = self.track.get_start_position()
         self.car = Car(self.world, start_pos, angle=np.random.uniform(0, 2*np.pi))
         
         self.contact_listener = ContactListener(self)
         self.world.contactListener = self.contact_listener
         
-        observation = self._get_observation()
-        info = {}
-        
-        return observation, info
-
-    def _create_track(self):
-        self.outer_track, self.inner_track = self._generate_track()
-        
-        # Create physical boundaries
-        for points in [self.outer_track, self.inner_track]:
-            for i in range(len(points)):
-                p1 = points[i]
-                p2 = points[(i + 1) % len(points)]
-                self.world.CreateStaticBody(shapes=edgeShape(vertices=[p1, p2]))
-
-    def _generate_track(self):
-        # Center the track around (0,0) in world coordinates
-        self.track_radius = 21.0  # Store as instance variable
-        num_points = 31     # Increase for smoother track
-        
-        # Set track center
-        self.track_center = (0, 0)  # Track is centered at origin in world coordinates
-        
-        # Generate outer track points
-        outer_track = []
-        for i in range(num_points):
-            angle = (i / num_points) * 2 * np.pi
-            # Add some variation to radius for more interesting track
-            r = self.track_radius * (1 + 0.2 * np.sin(3 * angle))
-            x = r * np.cos(angle)
-            y = r * np.sin(angle)
-            outer_track.append((x, y))
-            
-        # Generate inner track points with wider gap (changed from 0.7 to 0.6)
-        inner_track = []
-        inner_radius = self.track_radius * 0.6  # Increased track width by reducing this ratio
-        for i in range(num_points):
-            angle = (i / num_points) * 2 * np.pi
-            r = inner_radius * (1 + 0.2 * np.sin(3 * angle))
-            x = r * np.cos(angle)
-            y = r * np.sin(angle)
-            inner_track.append((x, y))
-            
-        return outer_track, inner_track
+        return self._get_observation(), {}
 
     def _get_observation(self):
-        car_pos = self.car.get_position()
-        car_angle = self.car.get_heading()
-        car_vel = self.car.get_linear_velocity()
-        car_ang_vel = self.car.get_angular_velocity()
-        rays = self._get_ray_distances()
-        
-        # Raw observation vector
-        observation = np.array([
-            car_pos[0], 
-            car_pos[1],
-            car_angle,
-            car_vel,
-            car_ang_vel
-        ] + rays + [float(self.car_touched_boundary)])
-        
-        # Normalize observation
-        return self._normalize_observation(observation)
+        obs = np.array([
+            *self.car.get_position(),          # x, y
+            self.car.get_heading(),            # angle
+            self.car.get_linear_velocity(),    # velocity
+            self.car.get_angular_velocity(),   # angular velocity
+            *self._get_ray_distances(),        # ray distances
+            float(self.car_touched_boundary)   # collision flag
+        ])
+        return self._normalize_observation(obs)
 
     def _normalize_observation(self, obs):
-        """Normalize observation components by fixed values."""
-        # Position (x,y)
-        obs[0:2] /= 100.0
-        
-        # Angle: already in [-pi, pi], normalize to [-1, 1]
-        obs[2] /= np.pi
-        
-        # Linear velocity [-20, 20] -> [-1, 1]
-        obs[3] /= 20.0
-        
-        # Angular velocity [-5, 5] -> [-1, 1]
-        obs[4] /= 5.0
-        
-        # Ray distances
-        obs[5:12] /= 100.0
-        
-        # Collision flag is already binary (0 or 1)
-        
-        #self._print_observation_table(obs)
-        return obs
+        obs[0:2] /= 100.0    # Position (x,y) -> [-1,1]
+        obs[2] /= np.pi      # Angle [-pi,pi] -> [-1,1]
+        obs[3] /= 20.0       # Linear vel [-20,20] -> [-1,1]
+        obs[4] /= 5.0        # Angular vel [-5,5] -> [-1,1]
+        obs[5:12] /= 100.0   # Ray distances [0,100] -> [0,1]
+        return obs           # obs[12] is binary collision flag (0,1)
 
     def _print_observation_table(self, observation):
         headers = ["X", "Y", "Car Angle", "Car Speed", "Car Angular Vel"] + \
-                  [f"Ray {i+1}" for i in range(7)] + ["Collision Flag"]
+                 [f"Ray {i+1}" for i in range(7)] + ["Collision Flag"]
         row_format = "{:>15}" * len(headers)
         print(row_format.format(*headers))
         print(row_format.format(*[f"{x:.2f}" for x in observation]))
 
     def _get_ray_distances(self):
-        # Ray angles from -90° to +90° relative to car's forward direction
-        ray_angles = [-np.pi/2, -np.pi/3, -np.pi/6, 0, np.pi/6, np.pi/3, np.pi/2]
-        ray_length = 100.0  # Maximum ray length
-        car_pos = self.car.get_position()
-        car_angle = self.car.get_angle()
-        
-        distances = []
-        self.ray_endpoints = []  # Store for visualization
-        callback = RayCastCallback()
-        
-        for angle in ray_angles:
-            total_angle = car_angle + angle
-            ray_dir = vec2(np.cos(total_angle), np.sin(total_angle))
-            end_point = vec2(
-                car_pos[0] + ray_dir[0] * ray_length,
-                car_pos[1] + ray_dir[1] * ray_length
-            )
-            
-            callback.reset()
-            self.world.RayCast(callback, car_pos, end_point)
-            
-            if callback.hit_point:
-                distance = np.sqrt(
-                    (callback.hit_point[0] - car_pos[0])**2 +
-                    (callback.hit_point[1] - car_pos[1])**2
-                )
-                self.ray_endpoints.append(callback.hit_point)
-            else:
-                distance = ray_length
-                self.ray_endpoints.append(end_point)
-            
-            distances.append(distance)
-        
+        distances, self.ray_endpoints = get_ray_distances(
+            self.world, self.car.get_position(), self.car.get_angle())
         return distances
 
     def step(self, action):
@@ -222,63 +89,42 @@ class RacingEnv(gym.Env):
             'drift': bool(action[2] > 0)
         }
         
-        # Update physics
-        self.car.step(car_action)
+        self.car.step(car_action)  # Update physics
         self.world.Step(1.0/self.FPS, 6, 2)
         
-        # Get new state
         obs = self._get_observation()
-        
-        # Calculate reward
         reward = self._calculate_reward()
         self.cumulative_reward += reward
         
-        # Check if episode is done
         terminated = self._is_done()
-        truncated = False
-        
-        info = {}
-        
-        return obs, reward, terminated, truncated, info
+        return obs, reward, terminated, False, {}
 
     def _calculate_reward(self):
         reward = self.car.get_linear_velocity() / 1000
-        # Add penalty for touching boundary
-        if self.car_touched_boundary:
-            reward -= 1.0
+        if self.car_touched_boundary: reward -= 1.0  # Add penalty for touching boundary
         return reward
 
     def _is_done(self):
-        if self.step_count >= self.max_steps or self.car_touched_boundary:
-            return True
-        return False
+        return self.step_count >= self.max_steps or self.car_touched_boundary
 
     def render(self):
-        if self.render_mode is None:
-            return None
+        if self.render_mode is None: return None
             
         if self.renderer is None:
-            if not pygame.get_init():
-                pygame.init()
-            if not pygame.display.get_init():
-                pygame.display.init()
-                
+            if not pygame.get_init(): pygame.init()
+            if not pygame.display.get_init(): pygame.display.init()
             from renderer import Renderer
             self.renderer = Renderer(self.render_mode)
         
-        result = self.renderer.render(
-            self.car,
-            self.outer_track,
-            self.inner_track,
+        outer_track, inner_track = self.track.get_boundaries()
+        return self.renderer.render(
+            self.car, outer_track, inner_track,
             ray_endpoints=self.ray_endpoints,
             mode=self.render_mode,
             step_count=self.step_count,
             cumulative_reward=self.cumulative_reward,
-            show_ray_distances=False  # Set to True if you want to see distances
+            show_ray_distances=False
         )
-        
-        return result
 
     def close(self):
-        if self.renderer:
-            self.renderer.close()
+        if self.renderer: self.renderer.close()
