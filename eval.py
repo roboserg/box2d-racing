@@ -29,7 +29,14 @@ def evaluate(run_dir, n_episodes=10):
         return
         
     print(f"Loading model from: {model_path}")
-    model = SAC.load(model_path, device="cpu", env=env, training=False)
+    try:
+        model = PPO.load(model_path, device="cpu", env=env, training=False)
+    except:
+        try:
+            model = SAC.load(model_path, device="cpu", env=env, training=False)
+        except Exception as e:
+            print(f"Failed to load model as either PPO or SAC: {e}")
+            return
     
     # Evaluation loop
     rewards = []
