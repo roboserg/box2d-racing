@@ -5,17 +5,23 @@ from car import Particle, SkidMark
 import random
 
 class Renderer:
-    def __init__(self, render_mode=None):
-        # Initialize pygame first
-        if not pygame.get_init():
-            pygame.init()
-        if not pygame.display.get_init():
-            pygame.display.init()
-            
+    def __init__(self, render_mode='human'):
         self.render_mode = render_mode
+        self.isopen = True
         self.screen = None
         self.clock = None
-        self.isopen = True
+        self.particles = []
+        self.skid_marks = []
+        self.crash_locations = []  # Store crash locations
+        
+        # Colors
+        self.GRAY = (70, 70, 70)
+        self.WHITE = (255, 255, 255)
+        self.BLACK = (0, 0, 0)
+        self.GREEN = (0, 255, 0)
+        self.YELLOW = (255, 255, 0)
+        
+        self.font = None
         self.SCREEN_WIDTH = 2000
         self.SCREEN_HEIGHT = 1200
         self.FPS = 60
