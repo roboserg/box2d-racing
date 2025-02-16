@@ -96,15 +96,14 @@ class RacingEnv(gym.Env):
         reward = self._calculate_reward()
         self.cumulative_reward += reward
         
-        terminated = self._is_done()
-        return obs, reward, terminated, False, {}
+        return obs, reward, self._is_terminated(), False, {}
 
     def _calculate_reward(self):
         reward = self.car.get_linear_velocity() / 1000
         if self.car_touched_boundary: reward -= 1.0  # Add penalty for touching boundary
         return reward
 
-    def _is_done(self):
+    def _is_terminated(self):
         return self.step_count >= self.max_steps or self.car_touched_boundary
 
     def render(self):
