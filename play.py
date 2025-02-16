@@ -1,19 +1,11 @@
-import os
-os.environ['SDL_VIDEODRIVER'] = 'x11'  # Force X11 driver before pygame import
-
-import gymnasium as gym
 import pygame
 import numpy as np
 from racing_env import RacingEnv
-import sys
+
 
 def main():
-    # Initialize pygame and display
+    # Initialize pygame
     pygame.init()
-    screen = pygame.display.set_mode((2000, 1200))  # Updated from 800, 600
-    if not screen:
-        print("Could not initialize display")
-        sys.exit(1)
     
     # Initialize environment
     env = RacingEnv(render_mode="human")

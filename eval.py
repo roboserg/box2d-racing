@@ -5,10 +5,34 @@ from stable_baselines3.common.monitor import Monitor
 from racing_env import RacingEnv
 from utils import find_latest_model
 
+def handle_key_events(paused):
+    """
+    Handle pygame key events during evaluation.
+    
+    Args:
+        paused: Current pause state
+        
+    Returns:
+        tuple: (should_reset, new_paused)
+    """
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_q):
+            pygame.quit()
+            exit()
+            
+        elif event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_p:  # Pause
+                paused = not paused
+                print("Paused" if paused else "Resumed")
+                
+            elif event.key == pygame.K_r:  # Restart episode
+                print("Restarting episode...")
+                return True, paused
+                
+    return False, paused
+
 def evaluate(n_episodes=10, render=True):
-    # Initialize pygame first
     pygame.init()
-    pygame.display.init()
     
     env = Monitor(RacingEnv(render_mode="human" if render else None))
     
@@ -32,24 +56,13 @@ def evaluate(n_episodes=10, render=True):
         paused = False
         
         while not done:
-            # Handle events
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    env.close()
-                    return
-                elif event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_q:  # Quit
-                        env.close()
-                        return
-                    elif event.key == pygame.K_p:  # Pause
-                        paused = not paused
-                        print("Paused" if paused else "Resumed")
-                    elif event.key == pygame.K_r:  # Restart episode
-                        obs = env.reset()[0]  # Reset the environment
-                        total_reward = 0
-                        steps = 0
-                        print("Restarting episode...")
-                        continue
+            # Handle key events
+            should_reset, paused = handle_key_events(paused)
+                
+            if should_reset:
+                obs = env.reset()[0]
+                total_reward, steps = 0, 0
+                continue
             
             if paused:
                 env.render()
