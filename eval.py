@@ -1,28 +1,35 @@
 import numpy as np
 import pygame
-from stable_baselines3 import SAC
+from stable_baselines3 import SAC, PPO
 from stable_baselines3.common.monitor import Monitor
 from racing_env import RacingEnv
 from utils import find_latest_model
 
 
 class Config:
-    RUN_DIR = "logs/SAC_2"
+    RUN_DIR = "logs"
     NUM_EVAL_EPISODES = 10
 
 
 def evaluate(run_dir, n_episodes=10):
+    """
+    Evaluate a trained model.
+    
+    Args:
+        run_dir: Directory containing the model checkpoints
+        n_episodes: Number of episodes to evaluate
+    """
     pygame.init()
     
     env = Monitor(RacingEnv(render_mode="human"))
     
-    model_path = find_latest_model(checkpoint_dir=run_dir)
+    model_path = find_latest_model(run_dir)
     if not model_path:
         print(f"No model found in {run_dir}. Exiting...")
         return
         
     print(f"Loading model from: {model_path}")
-    model = SAC.load(model_path, device="cpu", env=env, training=False)
+    model = PPO.load(model_path, device="cpu", env=env, training=False)
     
     # Evaluation loop
     rewards = []
@@ -33,6 +40,7 @@ def evaluate(run_dir, n_episodes=10):
         done = False
         total_reward, steps = 0, 0
         paused = False
+        episode_completed = False
         
         while not done:
             restart_episode, paused = handle_key_events(paused)
@@ -53,14 +61,20 @@ def evaluate(run_dir, n_episodes=10):
             steps += 1
             env.render()
             
-        if not done:  # If episode completed normally (not restarted)
+            if done:
+                episode_completed = True
+        
+        if episode_completed:  # Record stats for completed episodes (including failures)
             rewards.append(total_reward)
             episode_lengths.append(steps)
             print(f"Episode {episode + 1}: Reward = {total_reward:.2f}, Steps = {steps}")
     
-    print(f"\nEvaluation Results after {n_episodes} episodes:")
-    print(f"Average Reward: {np.mean(rewards):.2f} ± {np.std(rewards):.2f}")
-    print(f"Average Episode Length: {np.mean(episode_lengths):.1f} ± {np.std(episode_lengths):.1f}")
+    if rewards:  # Only print stats if we have data
+        print(f"\nEvaluation Results after {n_episodes} episodes:")
+        print(f"Average Reward: {np.mean(rewards):.2f} ± {np.std(rewards):.2f}")
+        print(f"Average Episode Length: {np.mean(episode_lengths):.1f} ± {np.std(episode_lengths):.1f}")
+    else:
+        print("\nNo episodes completed successfully for evaluation.")
     
     env.close()
 
@@ -95,4 +109,4 @@ def handle_key_events(paused):
 
 
 if __name__ == "__main__":
-    evaluate(Config.RUN_DIR, Config.NUM_EVAL_EPISODES)
+    evaluate(run_dir=Config.RUN_DIR, n_episodes=Config.NUM_EVAL_EPISODES)

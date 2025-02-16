@@ -1,42 +1,61 @@
-import os
-import glob
-import re
 from pathlib import Path
 
-def find_latest_model(checkpoint_dir="./checkpoints/"):
-    # Convert to Path object
+def find_latest_model(checkpoint_dir):
     checkpoint_path = Path(checkpoint_dir)
     
+    def _find_models_in_dir(dir_path):
+        # Check for final model first
+        final_models = ["racing_model_final.zip", "best_model.zip"]
+        for model_name in final_models:
+            final_model = dir_path / model_name
+            if final_model.exists():
+                return str(final_model)
+        
+        # Find all checkpoint files
+        files = list(dir_path.glob("*-steps-reward-*.zip"))
+        if not files:
+            return None
+            
+        # Extract step numbers and find max
+        steps = []
+        for f in files:
+            parts = f.name.split("-steps-reward-")
+            if len(parts) == 2 and parts[0].isdigit():
+                steps.append((int(parts[0]), str(f)))
+        
+        return max(steps)[1] if steps else None
+
     # Check if directory exists
     if not checkpoint_path.exists():
         print("No checkpoints directory found!")
         return None
     
-    # Check for final model first
-    final_models = ["racing_model_final.zip", "best_model.zip"]
-    for model_name in final_models:
-        final_model = checkpoint_path / model_name
-        if final_model.exists():
-            return str(final_model)
+    # Try to find models in the specified directory
+    model = _find_models_in_dir(checkpoint_path)
+    if model:
+        return model
+        
+    # If no models found, look for run directories (XX-name format)
+    run_dirs = []
+    for d in checkpoint_path.iterdir():
+        if d.is_dir():
+            parts = d.name.split("-", 1)
+            if len(parts) == 2 and parts[0].isdigit():
+                run_dirs.append((int(parts[0]), d))
     
-    # Find all checkpoint files
-    files = list(checkpoint_path.glob("*-steps-reward-*.zip"))
-    if not files:
-        print("No models found in checkpoints directory!")
+    if not run_dirs:
+        print("No run directories found!")
         return None
         
-    # Extract step numbers and find max
-    steps = []
-    for f in files:
-        match = re.search(r'(\d+)-steps-reward-', f.name)
-        if match:
-            steps.append((int(match.group(1)), str(f)))
+    # Get the latest run directory and search for models there
+    latest_run_dir = max(run_dirs)[1]
+    print(f"Searching in latest run directory: {latest_run_dir}")
+    model = _find_models_in_dir(latest_run_dir)
     
-    if not steps:
-        print("No valid model files found in checkpoints directory!")
-        return None
-        
-    return max(steps)[1] if steps else None
+    if not model:
+        print("No models found in the latest run directory!")
+    
+    return model
 
 
 def linear_schedule(initial_value):
@@ -60,9 +79,10 @@ def linear_schedule(initial_value):
 def setup_run_dir(run_name: str, base_log_dir: str = "logs") -> Path:
     """
     Set up the run directory for logging using pathlib.
+    If directory exists, increments the run number prefix.
     
     Args:
-        run_name: Name of the training run
+        run_name: Name of the training run (e.g. "04-test")
         base_log_dir: Base directory for all logs
         
     Returns:
@@ -70,5 +90,17 @@ def setup_run_dir(run_name: str, base_log_dir: str = "logs") -> Path:
     """
     log_path = Path(base_log_dir)
     run_path = log_path / run_name
+    
+    if run_path.exists():
+        parts = run_name.split("-", 1)
+        if len(parts) == 2 and parts[0].isdigit():
+            num, name = parts
+            current = int(num)
+            while (log_path / f"{current:02d}-{name}").exists():
+                current += 1
+            run_name = f"{current:02d}-{name}"
+            run_path = log_path / run_name
+            print(f"Run directory already exists. Using new name: {run_name}")
+    
     run_path.mkdir(parents=True, exist_ok=True)
     return run_path
