@@ -1,41 +1,70 @@
+import json
+import yaml
 from pathlib import Path
+from dataclasses import asdict
 
-def find_latest_model(checkpoint_dir):
+def _find_models_in_dir(dir_path: Path) -> str | None:
+    """
+    Search for model files in a directory, prioritizing final models over checkpoints.
+    
+    The function first looks for final model files ('racing_model_final.zip' or 'best_model.zip').
+    If none are found, it searches for checkpoint files in the format '*-steps-reward-*.zip'
+    and returns the one with the highest step count.
+    
+    Args:
+        dir_path: Directory path to search for model files
+        
+    Returns:
+        str: Path to the found model file, or None if no models are found
+    """
+    final_models = ["racing_model_final.zip", "best_model.zip"]
+    for model_name in final_models:
+        final_model = dir_path / model_name
+        if final_model.exists():
+            return str(final_model)
+    
+    files = list(dir_path.glob("*-steps-reward-*.zip"))
+    if not files:
+        return None
+        
+    steps = []
+    for f in files:
+        parts = f.name.split("-steps-reward-")
+        if len(parts) == 2 and parts[0].isdigit():
+            steps.append((int(parts[0]), str(f)))
+    
+    return max(steps)[1] if steps else None
+
+
+def find_latest_model(checkpoint_dir: str | Path) -> str | None:
+    """
+    Find the most recent model file in the checkpoint directory hierarchy.
+    
+    The function searches in the following order:
+    1. Direct search in the specified directory
+    2. If no models found, search in run subdirectories (format: XX-name)
+    3. In run subdirectories, select the one with highest prefix number
+    
+    Args:
+        checkpoint_dir: Base directory to search for model files
+        
+    Returns:
+        str: Path to the latest model file, or None if no models are found
+        
+    Example:
+        >>> find_latest_model("logs/training")
+        'logs/training/07-test/best_model.zip'
+    """
     checkpoint_path = Path(checkpoint_dir)
     
-    def _find_models_in_dir(dir_path):
-        # Check for final model first
-        final_models = ["racing_model_final.zip", "best_model.zip"]
-        for model_name in final_models:
-            final_model = dir_path / model_name
-            if final_model.exists():
-                return str(final_model)
-        
-        # Find all checkpoint files
-        files = list(dir_path.glob("*-steps-reward-*.zip"))
-        if not files:
-            return None
-            
-        # Extract step numbers and find max
-        steps = []
-        for f in files:
-            parts = f.name.split("-steps-reward-")
-            if len(parts) == 2 and parts[0].isdigit():
-                steps.append((int(parts[0]), str(f)))
-        
-        return max(steps)[1] if steps else None
-
-    # Check if directory exists
     if not checkpoint_path.exists():
         print("No checkpoints directory found!")
         return None
     
-    # Try to find models in the specified directory
     model = _find_models_in_dir(checkpoint_path)
     if model:
         return model
         
-    # If no models found, look for run directories (XX-name format)
     run_dirs = []
     for d in checkpoint_path.iterdir():
         if d.is_dir():
@@ -47,7 +76,6 @@ def find_latest_model(checkpoint_dir):
         print("No run directories found!")
         return None
         
-    # Get the latest run directory and search for models there
     latest_run_dir = max(run_dirs)[1]
     print(f"Searching in latest run directory: {latest_run_dir}")
     model = _find_models_in_dir(latest_run_dir)
@@ -76,19 +104,21 @@ def linear_schedule(initial_value):
 
     return schedule
 
-def setup_run_dir(run_name: str, base_log_dir: str = "logs") -> Path:
+def setup_run_dir(config) -> Path:
     """
     Set up the run directory for logging using pathlib.
     If directory exists, increments the run number prefix.
+    Dumps config as JSON and YAML in the run directory.
     
     Args:
-        run_name: Name of the training run (e.g. "04-test")
+        config: Config class containing run configuration (must have RUN_NAME attribute)
         base_log_dir: Base directory for all logs
         
     Returns:
         Path: Path object pointing to the run directory
     """
-    log_path = Path(base_log_dir)
+    run_name = config.RUN_NAME
+    log_path = Path(config.LOG_DIR)
     run_path = log_path / run_name
     
     if run_path.exists():
@@ -103,4 +133,10 @@ def setup_run_dir(run_name: str, base_log_dir: str = "logs") -> Path:
             print(f"Run directory already exists. Using new name: {run_name}")
     
     run_path.mkdir(parents=True, exist_ok=True)
+    
+    # Save as YAML
+    config_dict = asdict(config) if hasattr(config, '__dataclass_fields__') else vars(config)
+    with open(run_path / "config.yaml", "w") as f:
+        yaml.safe_dump(config_dict, f, default_flow_style=False)
+    
     return run_path
