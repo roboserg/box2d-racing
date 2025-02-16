@@ -66,7 +66,8 @@ class Car:
         
         # Adjust physics parameters
         # These parameters control the car's movement and handling characteristics
-        self.max_drive_force = 20.0  # Maximum force applied for acceleration
+        self.max_drive_force = 20.0  # Forward force
+        self.max_reverse_force = 30.0  # New parameter for reverse force (75% of forward)
         self.max_lateral_impulse = 6.0  # Maximum sideways force for grip
         self.brake_drag_multiplier = 5.0  # Multiplier for increased drag when braking
         self.base_drag = 0.2  # Base drag force applied to the car
@@ -109,6 +110,9 @@ class Car:
         forward_speed = forward_velocity.length
         steering_intensity = abs(action['steer'])
         
+        # Define is_braking early
+        is_braking = forward_speed > 3.0 and action['throttle'] < -0.1
+        
         # Calculate grip loss based on speed and steering
         if forward_speed > self.grip_loss_threshold:
             speed_factor = (forward_speed - self.grip_loss_threshold) / 15.0
@@ -143,14 +147,28 @@ class Car:
         self.body.angularDamping = 0.7 * self.current_grip
         
         # Apply driving force and braking
-        is_braking = action['throttle'] < 0 and forward_speed > 1.0
-        if is_braking:
-            forward_drag = -self.base_drag * forward_velocity * self.brake_drag_multiplier
-        else:
+        forward_normal = self.body.GetWorldVector(localVector=(1, 0))
+        forward_velocity = forward_normal.dot(self.body.linearVelocity) * forward_normal
+        forward_speed = forward_velocity.length
+
+        # Modified driving force application
+        forward_drag = -self.base_drag * forward_velocity  # Initialize base drag for all cases
+        
+        if action['throttle'] >= 0:
+            # Forward
             force = self.max_drive_force * action['throttle']
+        else:
+            # Reverse - use separate force value and only apply brake drag at higher speeds
+            is_braking = forward_speed > 3.0  # Only consider it braking at higher speeds
+            if is_braking:
+                forward_drag = -self.base_drag * forward_velocity * self.brake_drag_multiplier
+            else:
+                # Apply reverse force
+                force = self.max_reverse_force * action['throttle']  # throttle is negative here
+
+        # Apply the forces
+        if 'force' in locals():  # If force was defined (not pure braking)
             self.body.ApplyForce(force * forward_normal, self.body.worldCenter, True)
-            forward_drag = -self.base_drag * forward_velocity * (1.0 + 0.05 * forward_speed)
-            
         self.body.ApplyForce(forward_drag, self.body.worldCenter, True)
         
         # Modified steering with reduced control during braking
@@ -204,7 +222,7 @@ class Car:
         forward_speed = self.get_forward_velocity().length
         return (lateral_speed > 3 and forward_speed > 3) or \
                self.is_physically_drifting() or \
-               self.current_grip < 0.6  # Changed from 0.8 to make drift indication less sensitive
+               self.current_grip < 0.6
 
     def get_forward_velocity(self):
         forward_normal = self.body.GetWorldVector(localVector=(1, 0))
