@@ -31,11 +31,15 @@ class RacingEnv(gym.Env):
         self.max_steps = 5000
         self.cumulative_reward = 0.0
         self.car_touched_boundary = False
+        self.speed_history = []
+        self.SPEED_HISTORY_LENGTH = 200
+        self.SPEED_THRESHOLD = 0.1  # Consider car stationary if speed is below this
         
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
         self.step_count = self.cumulative_reward = 0.0
         self.car_touched_boundary = False
+        self.speed_history = []  # Clear speed history on reset
         
         self.world = world(gravity=(0, 0), doSleep=True)  # Create world
         self.track = Track(self.world)  # Create track
@@ -92,6 +96,12 @@ class RacingEnv(gym.Env):
         self.car.step(car_action)  # Update physics
         self.world.Step(1.0/self.FPS, 6, 2)
         
+        # Add current speed to history
+        current_speed = self.car.get_forward_velocity().length
+        self.speed_history.append(current_speed)
+        if len(self.speed_history) > self.SPEED_HISTORY_LENGTH:
+            self.speed_history.pop(0)
+        
         obs = self._get_observation()
         reward = self._calculate_reward()
         self.cumulative_reward += reward
@@ -105,7 +115,17 @@ class RacingEnv(gym.Env):
         return reward
 
     def _is_terminated(self):
-        return self.step_count >= self.max_steps or self.car_touched_boundary
+        # Check regular termination conditions
+        if self.step_count >= self.max_steps or self.car_touched_boundary:
+            return True
+            
+        # Check if car has been stationary
+        if len(self.speed_history) >= self.SPEED_HISTORY_LENGTH:
+            avg_speed = sum(self.speed_history) / len(self.speed_history)
+            if avg_speed < self.SPEED_THRESHOLD:
+                return True
+                
+        return False
 
     def render(self):
         if not self.render_mode: return
