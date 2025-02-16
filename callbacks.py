@@ -47,3 +47,29 @@ class SaveOnBestTrainingRewardCallback(BaseCallback):
                         print(f"Step: {self.num_timesteps} - new best reward: {ep_rew_mean:.2f}. "
                               f"Saving to {path}")
         return True
+
+class SaveLatestCallback(BaseCallback):
+    def __init__(self, save_freq: int, save_path: str, verbose: int = 1):
+        super().__init__(verbose)
+        self.save_freq = save_freq
+        self.save_path = save_path
+        self.latest_path = None
+
+    def _init_callback(self) -> None:
+        if self.save_path is not None:
+            os.makedirs(self.save_path, exist_ok=True)
+
+    def _on_step(self) -> bool:
+        if self.n_calls % self.save_freq == 0:
+            # Remove previous latest model if it exists
+            if self.latest_path and os.path.exists(self.latest_path):
+                os.remove(self.latest_path)
+            
+            # Save new latest model
+            self.latest_path = os.path.join(self.save_path, f"latest-{self.num_timesteps}-steps.zip")
+            self.model.save(self.latest_path)
+            
+            if self.verbose > 0:
+                print(f"Saving latest model to {self.latest_path}")
+        
+        return True
