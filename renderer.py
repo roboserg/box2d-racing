@@ -1,45 +1,8 @@
 import pygame
 import numpy as np
-import random
 from collections import deque
-
-class Particle:
-    def __init__(self, pos, velocity, color=(128, 128, 128), lifetime=0.5):
-        self.x, self.y = pos
-        self.vx, self.vy = velocity
-        self.color = color
-        self.lifetime = lifetime
-        self.age = 0.0
-        self.size = random.randint(4, 8)
-        self.alpha = 255
-        
-    def update(self, dt):
-        self.x += self.vx * dt
-        self.y += self.vy * dt
-        self.age += dt
-        self.alpha = int(255 * (1 - self.age / self.lifetime))
-        self.size = max(1, self.size - dt * 4)
-        
-    def is_alive(self):
-        return self.age < self.lifetime
-
-class SkidMark:
-    def __init__(self, pos, lifetime=2.0):
-        self.x, self.y = pos
-        self.lifetime = lifetime
-        self.age = 0.0
-        self.alpha = 255
-        self.width = 4  # Width of skid mark
-
-    def update(self, dt):
-        self.age += dt
-        # Fade out gradually in the last 0.5 seconds
-        fade_start = self.lifetime - 0.5
-        if self.age > fade_start:
-            self.alpha = int(255 * (1 - (self.age - fade_start) / 0.5))
-        
-    def is_alive(self):
-        return self.age < self.lifetime
+from car import Particle, SkidMark
+import random
 
 class Renderer:
     def __init__(self, render_mode=None):
@@ -63,8 +26,8 @@ class Renderer:
         
         # Calculate PPM to fit track with margin - reduced divisor to make track larger
         self.PPM = min(
-            (self.SCREEN_WIDTH - 2 * margin) / (2.5 * track_radius),  # Changed from 4 to 2.5
-            (self.SCREEN_HEIGHT - 2 * margin) / (2.5 * track_radius)  # Changed from 4 to 2.5
+            (self.SCREEN_WIDTH - 2 * margin) / (2.5 * track_radius),
+            (self.SCREEN_HEIGHT - 2 * margin) / (2.5 * track_radius)
         )
         
         # Center the track
@@ -82,22 +45,30 @@ class Renderer:
         self.font = None
         self.particles = []
         self.skid_marks = deque(maxlen=1000)  # Limit total number of skid marks
+        
+        # Pre-compute common transformations
+        self.screen_transform = np.array([
+            [self.PPM, 0],
+            [0, -self.PPM]
+        ])
+        self.screen_offset = np.array([self.TRACK_OFFSET_X, self.SCREEN_HEIGHT - self.TRACK_OFFSET_Y])
+        
+        # Initialize other attributes
         self.init_pygame()
         
-        # Speed graph settings - moved to center top
+        # Speed graph settings
         self.speed_history = []
-        self.max_history = 100  # Number of speed points to show
-        graph_width = 300  # Increased width
-        graph_height = 150  # Increased height
-        # Position graph in center top, below stats text
+        self.max_history = 100
+        graph_width = 300
+        graph_height = 150
         self.graph_rect = pygame.Rect(
-            (self.SCREEN_WIDTH - graph_width) // 2,  # Centered horizontally
-            50,  # Just below the stats text
+            (self.SCREEN_WIDTH - graph_width) // 2,
+            50,
             graph_width,
             graph_height
         )
-        self.graph_color = (0, 255, 0)  # Green line
-        self.graph_bg = (0, 0, 0, 128)  # Semi-transparent black background
+        self.graph_color = (0, 255, 0)
+        self.graph_bg = (0, 0, 0, 128)
 
     def init_pygame(self):
         if not pygame.get_init():
@@ -162,121 +133,82 @@ class Renderer:
             if not mark.is_alive():
                 self.skid_marks.remove(mark)
 
-    def render(self, car, outer_track, inner_track, ray_endpoints=None, mode='human', 
-              step_count=0, cumulative_reward=0.0, show_ray_distances=False):
-        if not self.isopen: return None
-        self.init_pygame()
+    def _render_rays(self, car_pos, ray_endpoints, show_ray_distances=False):
+        """
+        Render ray sensors and their distance labels.
         
-        if self.screen is None:
-            self.screen = pygame.display.set_mode((self.SCREEN_WIDTH, self.SCREEN_HEIGHT))
-            self.clock = pygame.time.Clock()
+        Args:
+            car_pos: numpy array or tuple of car's position
+            ray_endpoints: list of ray endpoint positions
+            show_ray_distances: boolean to toggle distance label display
+        
+        Returns:
+            list of surfaces to be blitted to the main screen
+        """
+        if not ray_endpoints:
+            return []
+        
+        surfaces_to_blit = []
+        
+        # Convert to numpy arrays for vectorized operations
+        car_pos = np.array(car_pos)
+        car_pos_screen = np.array(self.to_screen(car_pos))
+        endpoints = np.array([self.to_screen(ep) for ep in ray_endpoints])
+        
+        # Create ray surface
+        ray_surface = pygame.Surface((self.SCREEN_WIDTH, self.SCREEN_HEIGHT), pygame.SRCALPHA)
+        for endpoint in endpoints:
+            pygame.draw.line(ray_surface, (255, 0, 0, 64), car_pos_screen, endpoint, 2)
+        surfaces_to_blit.append((ray_surface, (0, 0)))
+        
+        if show_ray_distances:
+            # Vectorized distance calculation
+            ray_vectors = np.array(ray_endpoints) - car_pos
+            distances = np.linalg.norm(ray_vectors, axis=1)
+            
+            # Calculate text positions vectorized
+            midpoints = (car_pos_screen + endpoints) // 2
+            
+            # Pre-render all distance texts
+            distance_texts = [f"{d:.1f}" for d in distances]
+            text_surfaces = [self.font.render(text, True, self.YELLOW) for text in distance_texts]
+            text_backgrounds = [self.font.render(text, True, self.BLACK) for text in distance_texts]
+            text_rects = [surf.get_rect(center=pos) for surf, pos in zip(text_surfaces, midpoints)]
+            
+            # Create text surface
+            text_surface = pygame.Surface((self.SCREEN_WIDTH, self.SCREEN_HEIGHT), pygame.SRCALPHA)
+            
+            # Draw all texts with outline effect
+            offsets = np.array([(-1,-1), (-1,1), (1,-1), (1,1)])
+            for text_bg, text_surf, rect in zip(text_backgrounds, text_surfaces, text_rects):
+                # Draw outline
+                for offset in offsets:
+                    text_surface.blit(text_bg, (rect.x + offset[0], rect.y + offset[1]))
+                # Draw main text
+                text_surface.blit(text_surf, rect)
+            
+            surfaces_to_blit.append((text_surface, (0, 0)))
+        
+        return surfaces_to_blit
 
-        self.screen.fill(self.GRAY)
+    def _render_speed_graph(self, forward_velocity):
+        """
+        Render the speed graph with history, labels, and axes.
         
-        # Draw skid marks on separate surface for alpha blending
-        skid_surface = pygame.Surface((self.SCREEN_WIDTH, self.SCREEN_HEIGHT), pygame.SRCALPHA)
-        for mark in self.skid_marks:
-            color = (30, 30, 30, mark.alpha)  # Dark gray with alpha
-            pygame.draw.circle(skid_surface, color, (int(mark.x), int(mark.y)), mark.width)
-        self.screen.blit(skid_surface, (0, 0))
+        Args:
+            forward_velocity: current forward velocity of the car
+            
+        Returns:
+            Surface: rendered graph surface
+        """
+        # Create graph surface
+        graph_surface = pygame.Surface((self.graph_rect.width, self.graph_rect.height), pygame.SRCALPHA)
+        pygame.draw.rect(graph_surface, self.graph_bg, graph_surface.get_rect())
         
-        # Draw track
-        pygame.draw.lines(self.screen, self.WHITE, True,
-                         [self.to_screen(p) for p in outer_track], 5)
-        pygame.draw.lines(self.screen, self.BLACK, True,
-                         [self.to_screen(p) for p in inner_track], 5)
-        
-        # Draw car
-        car_pos = car.get_position()
-        car_angle = car.get_angle()
-        
-        # Create car polygon (adjusted for smaller size)
-        vertices = []
-        for x, y in [(-0.5, -0.25), (0.5, -0.25), (0.5, 0.25), (-0.5, 0.25)]:  # Smaller vertices
-            vertex = (
-                car_pos[0] + x * np.cos(car_angle) - y * np.sin(car_angle),
-                car_pos[1] + x * np.sin(car_angle) + y * np.cos(car_angle)
-            )
-            vertices.append(self.to_screen(vertex))
-        
-        # Draw car body
-        pygame.draw.polygon(self.screen, self.RED, vertices)
-        
-        # Draw front indicator (adjusted size)
-        front_center = (
-            car_pos[0] + 0.6 * np.cos(car_angle),  # Reduced from 2.2
-            car_pos[1] + 0.6 * np.sin(car_angle)
-        )
-        front_left = (
-            car_pos[0] + 0.5 * np.cos(car_angle) - 0.2 * np.sin(car_angle),  # Reduced from 1.8 and 0.4
-            car_pos[1] + 0.5 * np.sin(car_angle) + 0.2 * np.cos(car_angle)
-        )
-        front_right = (
-            car_pos[0] + 0.5 * np.cos(car_angle) + 0.2 * np.sin(car_angle),
-            car_pos[1] + 0.5 * np.sin(car_angle) - 0.2 * np.cos(car_angle)
-        )
-        front_triangle = [
-            self.to_screen(front_center),
-            self.to_screen(front_left),
-            self.to_screen(front_right)
-        ]
-        pygame.draw.polygon(self.screen, self.WHITE, front_triangle)
-
-        # Draw rays and their distances
-        if ray_endpoints:
-            car_pos_screen = self.to_screen(car.get_position())
-            car_pos = car.get_position()
-            for endpoint in ray_endpoints:
-                endpoint_screen = self.to_screen(endpoint)
-                # Draw the ray with semi-transparent red
-                ray_surface = pygame.Surface((self.SCREEN_WIDTH, self.SCREEN_HEIGHT), pygame.SRCALPHA)
-                pygame.draw.line(ray_surface, (255, 0, 0, 64), car_pos_screen, endpoint_screen, 2)
-                self.screen.blit(ray_surface, (0, 0))
-                
-                # Only show distance text if enabled
-                if show_ray_distances:
-                    # Calculate distance
-                    distance = np.sqrt(
-                        (endpoint[0] - car_pos[0])**2 +
-                        (endpoint[1] - car_pos[1])**2
-                    )
-                    
-                    # Position the text in the middle of the ray
-                    text_pos = (
-                        (car_pos_screen[0] + endpoint_screen[0]) // 2,
-                        (car_pos_screen[1] + endpoint_screen[1]) // 2
-                    )
-                    
-                    # Render distance text
-                    distance_text = f"{distance:.1f}"
-                    text_surface = self.font.render(distance_text, True, self.YELLOW)
-                    # Add a black outline/background for better visibility
-                    text_background = self.font.render(distance_text, True, self.BLACK)
-                    text_rect = text_surface.get_rect(center=text_pos)
-                    
-                    # Draw text with offset for outline effect
-                    for dx, dy in [(-1,-1), (-1,1), (1,-1), (1,1)]:
-                        self.screen.blit(text_background, 
-                                       (text_rect.x + dx, text_rect.y + dy))
-                    self.screen.blit(text_surface, text_rect)
-
-        # Draw particles
-        particle_surface = pygame.Surface((self.SCREEN_WIDTH, self.SCREEN_HEIGHT), pygame.SRCALPHA)
-        for p in self.particles:
-            # Use the particle's own color instead of forcing grey
-            color = (*p.color, p.alpha)  # Convert RGB to RGBA using particle's color
-            pygame.draw.circle(particle_surface, color, (int(p.x), int(p.y)), int(p.size))
-        self.screen.blit(particle_surface, (0, 0))
-
         # Update speed history
-        forward_velocity = car.get_forward_velocity().length
         self.speed_history.append(forward_velocity)
         if len(self.speed_history) > self.max_history:
             self.speed_history.pop(0)
-            
-        # Draw speed graph
-        graph_surface = pygame.Surface((self.graph_rect.width, self.graph_rect.height), pygame.SRCALPHA)
-        pygame.draw.rect(graph_surface, self.graph_bg, graph_surface.get_rect())
         
         # Draw graph lines
         if len(self.speed_history) > 1:
@@ -289,12 +221,12 @@ class Renderer:
             # Use all-time max for scaling, with minimum of 20
             max_speed = max(self.all_time_max_speed, 20)
             
-            # Draw points
-            points = []
-            for i, speed in enumerate(self.speed_history):
-                x = i * (self.graph_rect.width / self.max_history)
-                y = self.graph_rect.height * (1 - speed / max_speed)
-                points.append((x, y))
+            # Draw points using numpy for vectorization
+            points = np.array([
+                (i * (self.graph_rect.width / self.max_history),
+                 self.graph_rect.height * (1 - speed / max_speed))
+                for i, speed in enumerate(self.speed_history)
+            ])
             
             # Draw left side ticks (0 and max)
             left_ticks = [
@@ -342,11 +274,74 @@ class Renderer:
         speed_label = self.font.render(f"{forward_velocity:.1f}", True, (255, 255, 255))
         graph_surface.blit(speed_label, (5, 5))
         
-        # Blit graph to main screen
+        return graph_surface
+
+    def render(self, car, outer_track, inner_track, ray_endpoints=None, mode='human', 
+              step_count=0, cumulative_reward=0.0, show_ray_distances=False):
+        if not self.isopen: return None
+        self.init_pygame()
+        
+        if self.screen is None:
+            self.screen = pygame.display.set_mode((self.SCREEN_WIDTH, self.SCREEN_HEIGHT))
+            self.clock = pygame.time.Clock()
+
+        self.screen.fill(self.GRAY)
+        
+        # Draw skid marks on separate surface for alpha blending
+        skid_surface = pygame.Surface((self.SCREEN_WIDTH, self.SCREEN_HEIGHT), pygame.SRCALPHA)
+        for mark in self.skid_marks:
+            color = (30, 30, 30, mark.alpha)  # Dark gray with alpha
+            pygame.draw.circle(skid_surface, color, (int(mark.x), int(mark.y)), mark.width)
+        self.screen.blit(skid_surface, (0, 0))
+        
+        # Draw track
+        pygame.draw.lines(self.screen, self.WHITE, True,
+                         [self.to_screen(p) for p in outer_track], 5)
+        pygame.draw.lines(self.screen, self.BLACK, True,
+                         [self.to_screen(p) for p in inner_track], 5)
+        
+        # Draw car
+        car_pos = car.get_position()
+        car_angle = car.get_angle()
+        
+        # Create car polygon (adjusted for smaller size)
+        vertices = []
+        for x, y in [(-0.5, -0.25), (0.5, -0.25), (0.5, 0.25), (-0.5, 0.25)]:  # Smaller vertices
+            vertex = (
+                car_pos[0] + x * np.cos(car_angle) - y * np.sin(car_angle),
+                car_pos[1] + x * np.sin(car_angle) + y * np.cos(car_angle)
+            )
+            vertices.append(self.to_screen(vertex))
+        
+        # Draw car body
+        pygame.draw.polygon(self.screen, self.RED, vertices)
+        
+        # Draw front indicator
+        front_center = (
+            car_pos[0] + 0.6 * np.cos(car_angle),
+            car_pos[1] + 0.6 * np.sin(car_angle)
+        )
+        pygame.draw.circle(self.screen, self.WHITE, self.to_screen(front_center), 3)
+
+        # Draw rays
+        ray_surfaces = self._render_rays(car_pos, ray_endpoints, show_ray_distances)
+        for surface, pos in ray_surfaces:
+            self.screen.blit(surface, pos)
+
+        # Draw particles
+        particle_surface = pygame.Surface((self.SCREEN_WIDTH, self.SCREEN_HEIGHT), pygame.SRCALPHA)
+        for p in self.particles:
+            color = (*p.color, p.alpha)  # Convert RGB to RGBA using particle's color
+            pygame.draw.circle(particle_surface, color, (int(p.x), int(p.y)), int(p.size))
+        self.screen.blit(particle_surface, (0, 0))
+
+        # Get and render speed graph
+        forward_velocity = car.get_forward_velocity().length
+        graph_surface = self._render_speed_graph(forward_velocity)
         self.screen.blit(graph_surface, self.graph_rect)
         
         # Draw stats
-        current_fps = int(self.clock.get_fps())  # Get current FPS
+        current_fps = int(self.clock.get_fps())
         drift_active = "Yes" if car.current_action['drift'] else "No"
         stats_text = f"Step: {step_count} | Reward: {cumulative_reward:.1f} | Speed: {forward_velocity:.1f} | Drift Key: {drift_active} | FPS: {current_fps}"
         text_surface = self.font.render(stats_text, True, self.BLACK)

@@ -108,7 +108,7 @@ class RacingEnv(gym.Env):
         return self.step_count >= self.max_steps or self.car_touched_boundary
 
     def render(self):
-        if self.render_mode is None: return None
+        if not self.render_mode: return
             
         if self.renderer is None:
             if not pygame.get_init(): pygame.init()
