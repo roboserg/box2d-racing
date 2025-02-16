@@ -98,9 +98,8 @@ class Track:
             self.world.CreateStaticBody(shapes=b2EdgeShape(vertices=[p1, p2]))
     
     def get_start_position(self):
-        """Get the recommended starting position for the car."""
-        # Use the first center point and offset it slightly
-        start_point = self.center_points[0]
+        """Get a random starting position from the track's center points."""
+        start_point = self.center_points[np.random.randint(0, len(self.center_points))]
         return (float(start_point[0]), float(start_point[1]))
     
     def get_boundaries(self):
