@@ -21,7 +21,7 @@ class Renderer:
         self.FPS = 60
         
         # Calculate PPM based on track size (from racing_env.py track_radius = 21.0)
-        track_radius = 21.0  # Match with racing_env.py
+        track_radius = 20.0  # Match with racing_env.py
         margin = 100  # Pixels margin from screen edges
         
         # Calculate PPM to fit track with margin - reduced divisor to make track larger
@@ -85,7 +85,7 @@ class Renderer:
         )
         
     def spawn_drift_particles(self, car):
-        if car.is_drifting():
+        if car.is_physically_drifting():
             forward_normal = car.body.GetWorldVector(localVector=(1, 0))
             right_normal = car.body.GetWorldVector(localVector=(0, 1))
             

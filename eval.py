@@ -29,7 +29,7 @@ def evaluate(run_dir, n_episodes=10):
         return
         
     print(f"Loading model from: {model_path}")
-    model = PPO.load(model_path, device="cpu", env=env, training=False)
+    model = SAC.load(model_path, device="cpu", env=env, training=False)
     
     # Evaluation loop
     rewards = []
