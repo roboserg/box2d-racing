@@ -65,10 +65,19 @@ class Car:
         self.body.CreateFixture(**fixture_def)
         
         # Adjust physics parameters
-        self.max_drive_force = 20.0
-        self.max_lateral_impulse = 6.0
-        self.brake_drag_multiplier = 4.0
-        self.base_drag = 0.2
+        # These parameters control the car's movement and handling characteristics
+        self.max_drive_force = 20.0  # Maximum force applied for acceleration
+        self.max_lateral_impulse = 6.0  # Maximum sideways force for grip
+        self.brake_drag_multiplier = 5.0  # Multiplier for increased drag when braking
+        self.base_drag = 0.2  # Base drag force applied to the car
+
+        # Add slippage-related parameters
+        self.grip_loss_threshold = 12.0  # Increased speed threshold before grip loss
+        self.turn_grip_loss_factor = 0.4  # Increased grip loss factor for turns
+        self.recovery_rate = 0.2  # Faster recovery
+        self.current_grip = 1.0
+        self.min_grip = 0.4  # Increased minimum grip
+        self.drift_threshold = 4.0  # Minimum lateral velocity for drift effects
 
     def get_position(self):
         return self.body.position
@@ -86,77 +95,125 @@ class Car:
 
     def step(self, action):
         """
-        action: dict with keys: 'throttle', 'steer', 'drift'
-        throttle: float [-1, 1] for backward/forward
-        steer: float [-1, 1] for right/left
-        drift: bool for drift mode
+        Process car physics step with given control inputs.
+        
+        Args:
+            action: dict with keys:
+                - throttle: float [-1, 1] for backward/forward
+                - steer: float [-1, 1] for right/left
+                - drift: bool for drift mode
         """
-        self.current_action = action  # Store the current action
-        # Update friction
+        self.current_action = action
+        forward_normal = self.body.GetWorldVector(localVector=(1, 0))
+        forward_velocity = forward_normal.dot(self.body.linearVelocity) * forward_normal
+        forward_speed = forward_velocity.length
+        steering_intensity = abs(action['steer'])
+        
+        # Calculate grip loss based on speed and steering
+        if forward_speed > self.grip_loss_threshold:
+            speed_factor = (forward_speed - self.grip_loss_threshold) / 15.0
+            turn_factor = steering_intensity * self.turn_grip_loss_factor
+            grip_loss = speed_factor * turn_factor * 0.5
+            self.current_grip = max(
+                self.min_grip,
+                self.current_grip - grip_loss
+            )
+        else:
+            self.current_grip = min(
+                1.0,
+                self.current_grip + self.recovery_rate
+            )
+        
+        # Apply lateral impulse with grip factor
         right_normal = self.body.GetWorldVector(localVector=(0, 1))
         lateral_velocity = right_normal.dot(self.body.linearVelocity) * right_normal
         
-        # Enable drift when braking or when drift button is pressed
-        is_braking = self.is_braking()
-        drift_enabled = action['drift'] or is_braking
-        drift_factor = 0.05 if drift_enabled else 1.0
+        drift_enabled = action['drift'] or self.is_physically_drifting()
+        base_drift_factor = 0.05 if drift_enabled else 1.0
+        final_drift_factor = base_drift_factor * self.current_grip
         
-        impulse = -self.body.mass * lateral_velocity * drift_factor
+        impulse = -self.body.mass * lateral_velocity * final_drift_factor
         
         if impulse.length > self.max_lateral_impulse:
             impulse *= self.max_lateral_impulse / impulse.length
         
         self.body.ApplyLinearImpulse(impulse, self.body.worldCenter, True)
-        self.body.angularVelocity *= 0.7
         
-        # Apply driving force
-        forward_normal = self.body.GetWorldVector(localVector=(1, 0))
-        forward_velocity = forward_normal.dot(self.body.linearVelocity) * forward_normal
-        forward_speed = forward_velocity.length
+        # Adjust angular damping based on grip
+        self.body.angularDamping = 0.7 * self.current_grip
         
-        # Driving and braking
-        if action['throttle'] < 0 and forward_speed > 1.0:  # Braking
+        # Apply driving force and braking
+        is_braking = action['throttle'] < 0 and forward_speed > 1.0
+        if is_braking:
             forward_drag = -self.base_drag * forward_velocity * self.brake_drag_multiplier
         else:
             force = self.max_drive_force * action['throttle']
             self.body.ApplyForce(force * forward_normal, self.body.worldCenter, True)
-            # Gentler speed-dependent drag
             forward_drag = -self.base_drag * forward_velocity * (1.0 + 0.05 * forward_speed)
             
         self.body.ApplyForce(forward_drag, self.body.worldCenter, True)
         
-        # Steering
-        if forward_speed > 0.5:  # Only steer if moving
-            # Speed-dependent steering with drift modification
-            if action['drift']:
-                # During drift: tighter turns and less speed limitation
-                speed_factor = min(1.0, 14.0 / forward_speed) if forward_speed > 12.0 else 1.0
-                desired_angular_velocity = -4.0 * action['steer'] * speed_factor  # Added negative sign
-            else:
-                # Normal steering
-                speed_factor = min(1.0, 10.0 / forward_speed) if forward_speed > 8.0 else 1.0
-                desired_angular_velocity = -3.0 * action['steer'] * speed_factor  # Added negative sign
+        # Modified steering with reduced control during braking
+        min_speed_for_steering = 1.0
+        speed_factor = min(1.0, forward_speed / min_speed_for_steering)
+        
+        if forward_speed > 0.1:
+            max_steering_speed = 10.0
+            steering_speed_factor = min(forward_speed / max_steering_speed, 1.0)
             
-            # Apply torque to achieve desired angular velocity
+            # Calculate braking influence on steering
+            brake_steering_reduction = 0.3 if is_braking else 1.0
+            turn_reduction = (1.0 / (1.0 + (forward_speed / 20.0))) * brake_steering_reduction
+            
+            if action['drift']:
+                # During drift: maintain better steering control than braking
+                base_steer = -6.0 * action['steer'] * steering_speed_factor
+                desired_angular_velocity = base_steer * turn_reduction * 0.8
+            else:
+                # Normal steering: significantly reduced during braking
+                grip_modified_steer = action['steer'] * (
+                    0.8 + (1.0 - self.current_grip) * 0.3
+                )
+                base_steer = -4.0 * grip_modified_steer * steering_speed_factor
+                desired_angular_velocity = base_steer * turn_reduction
+            
+            # Apply speed factor to limit low-speed turning
+            desired_angular_velocity *= speed_factor
+            
+            # Limit maximum turning rate
+            max_angular_velocity = 3.0
+            desired_angular_velocity = max(
+                min(desired_angular_velocity, max_angular_velocity),
+                -max_angular_velocity
+            )
+            
             current_angular_velocity = self.body.angularVelocity
             torque = (desired_angular_velocity - current_angular_velocity) * self.body.mass
-            self.body.ApplyTorque(torque, True)
+            self.body.ApplyTorque(torque * self.current_grip, True)
+
+    def is_physically_drifting(self):
+        # Get lateral velocity magnitude
+        right_normal = self.body.GetWorldVector(localVector=(0, 1))
+        lateral_velocity = right_normal.dot(self.body.linearVelocity) * right_normal
+        return lateral_velocity.length > self.drift_threshold
 
     def is_drifting(self):
+        """Returns true if the car is drifting (includes both intentional drift and slippage)"""
         right_normal = self.body.GetWorldVector(localVector=(0, 1))
         lateral_speed = abs(right_normal.dot(self.body.linearVelocity))
         forward_speed = self.get_forward_velocity().length
-        # Consider both manual drift and brake-induced drift
-        return (lateral_speed > 3 and forward_speed > 3) or self.is_braking()
+        return (lateral_speed > 3 and forward_speed > 3) or \
+               self.is_physically_drifting() or \
+               self.current_grip < 0.6  # Changed from 0.8 to make drift indication less sensitive
 
     def get_forward_velocity(self):
         forward_normal = self.body.GetWorldVector(localVector=(1, 0))
         return forward_normal.dot(self.body.linearVelocity) * forward_normal
 
     def is_braking(self):
-        forward_normal = self.body.GetWorldVector(localVector=(1, 0))
-        forward_velocity = forward_normal.dot(self.body.linearVelocity)
-        return forward_velocity > 3.0 and self.body.linearVelocity.dot(forward_normal) > 0 and self.current_action['throttle'] < -0.5
+        # Only consider braking if we have significant forward speed
+        forward_speed = self.get_linear_velocity()
+        return self.current_action['throttle'] < -0.1 and forward_speed > 2.0
 
     def get_heading(self):
         """Returns the car's heading angle in radians (0 = right, pi/2 = up)"""
