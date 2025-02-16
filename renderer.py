@@ -20,17 +20,8 @@ class Renderer:
         self.SCREEN_HEIGHT = 1200
         self.FPS = 60
         
-        # Calculate PPM based on track size (from racing_env.py track_radius = 21.0)
-        track_radius = 20.0  # Match with racing_env.py
-        margin = 100  # Pixels margin from screen edges
-        
-        # Calculate PPM to fit track with margin - reduced divisor to make track larger
-        self.PPM = min(
-            (self.SCREEN_WIDTH - 2 * margin) / (2.5 * track_radius),
-            (self.SCREEN_HEIGHT - 2 * margin) / (2.5 * track_radius)
-        )
-        
-        # Center the track
+        # Initialize with temporary values
+        self.PPM = 10
         self.TRACK_OFFSET_X = self.SCREEN_WIDTH / 2
         self.TRACK_OFFSET_Y = self.SCREEN_HEIGHT / 2
         
@@ -61,9 +52,11 @@ class Renderer:
         self.max_history = 100
         graph_width = 300
         graph_height = 150
+        margin = 20  # Margin from screen edges
+        
         self.graph_rect = pygame.Rect(
-            (self.SCREEN_WIDTH - graph_width) // 2,
-            50,
+            self.SCREEN_WIDTH - graph_width - margin,  # Right align with margin
+            self.SCREEN_HEIGHT - graph_height - margin,  # Bottom align with margin
             graph_width,
             graph_height
         )
@@ -275,10 +268,42 @@ class Renderer:
         graph_surface.blit(speed_label, (5, 5))
         
         return graph_surface
+    
+    def configure_display(self, outer_track):
+        """Calculate PPM and offsets based on track boundaries"""
+        points = np.array(outer_track)
+        min_x, min_y = np.min(points, axis=0)
+        max_x, max_y = np.max(points, axis=0)
+        
+        track_width = max_x - min_x
+        track_height = max_y - min_y
+        
+        self.PPM = min(
+            self.SCREEN_WIDTH * 0.58 / track_width,
+            self.SCREEN_HEIGHT * 0.58 / track_height
+        )
+        
+        # Center the track
+        center_x = (min_x + max_x) / 2
+        center_y = (min_y + max_y) / 2
+        
+        # Update screen transform matrix and offset
+        self.TRACK_OFFSET_X = self.SCREEN_WIDTH/2 - center_x * self.PPM 
+        self.TRACK_OFFSET_Y = self.SCREEN_HEIGHT/2 + center_y * self.PPM + 70
+        
+        # Update the screen transform matrix
+        self.screen_transform = np.array([
+            [self.PPM, 0],
+            [0, -self.PPM]
+        ])
+        self.screen_offset = np.array([self.TRACK_OFFSET_X, self.SCREEN_HEIGHT - self.TRACK_OFFSET_Y])
 
     def render(self, car, outer_track, inner_track, ray_endpoints=None, mode='human', 
               step_count=0, cumulative_reward=0.0, show_ray_distances=False):
         if not self.isopen: return None
+        
+        self.configure_display(outer_track)
+            
         self.init_pygame()
         
         if self.screen is None:
