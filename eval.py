@@ -8,7 +8,8 @@ from utils import find_latest_model
 
 class Config:
     RUN_DIR = "logs"
-    NUM_EVAL_EPISODES = 10
+    NUM_EVAL_EPISODES = 99
+    BEST_OR_LATEST = "best"  # "best" or "last"
 
 
 def evaluate(run_dir, n_episodes=10):
@@ -23,7 +24,7 @@ def evaluate(run_dir, n_episodes=10):
     
     env = Monitor(RacingEnv(render_mode="human"))
     
-    model_path = find_latest_model(run_dir)
+    model_path = find_latest_model(run_dir, mode=Config.BEST_OR_LATEST)
     if not model_path:
         print(f"No model found in {run_dir}. Exiting...")
         return
