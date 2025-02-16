@@ -2,8 +2,9 @@ import json
 import yaml
 from pathlib import Path
 from dataclasses import asdict
+from typing import Literal
 
-def _find_models_in_dir(dir_path: Path) -> str | None:
+def _find_models_in_dir(dir_path: Path, mode: Literal["best", "last"]) -> str | None:
     """
     Search for model files in a directory, prioritizing final models over checkpoints.
     
@@ -13,30 +14,50 @@ def _find_models_in_dir(dir_path: Path) -> str | None:
     
     Args:
         dir_path: Directory path to search for model files
+        mode: Either "best" for best performing model or "last" for most recent checkpoint
         
     Returns:
         str: Path to the found model file, or None if no models are found
     """
-    final_models = ["racing_model_final.zip", "best_model.zip"]
-    for model_name in final_models:
-        final_model = dir_path / model_name
-        if final_model.exists():
-            return str(final_model)
-    
-    files = list(dir_path.glob("*-steps-reward-*.zip"))
-    if not files:
-        return None
+    if mode == "best":
+        # Search for best model files first
+        final_models = ["racing_model_final.zip", "best_model.zip"]
+        for model_name in final_models:
+            final_model = dir_path / model_name
+            if final_model.exists():
+                return str(final_model)
         
-    steps = []
-    for f in files:
-        parts = f.name.split("-steps-reward-")
-        if len(parts) == 2 and parts[0].isdigit():
-            steps.append((int(parts[0]), str(f)))
+        # Then search for checkpoint files with rewards
+        files = list(dir_path.glob("*-steps-reward-*.zip"))
+        if not files:
+            return None
+            
+        steps = []
+        for f in files:
+            parts = f.name.split("-steps-reward-")
+            if len(parts) == 2 and parts[0].isdigit():
+                steps.append((int(parts[0]), str(f)))
+        
+        return max(steps)[1] if steps else None
+        
+    elif mode == "last":
+        # Search for latest checkpoint files
+        files = list(dir_path.glob("latest-*-steps.zip"))
+        if not files:
+            return None
+            
+        steps = []
+        for f in files:
+            parts = f.name.split("-")
+            if len(parts) == 3 and parts[1].isdigit():
+                steps.append((int(parts[1]), str(f)))
+        
+        return max(steps)[1] if steps else None
     
-    return max(steps)[1] if steps else None
+    return None
 
 
-def find_latest_model(checkpoint_dir: str | Path) -> str | None:
+def find_latest_model(checkpoint_dir: str | Path, mode: Literal["best", "last"] = "best") -> str | None:
     """
     Find the most recent model file in the checkpoint directory hierarchy.
     
@@ -61,7 +82,7 @@ def find_latest_model(checkpoint_dir: str | Path) -> str | None:
         print("No checkpoints directory found!")
         return None
     
-    model = _find_models_in_dir(checkpoint_path)
+    model = _find_models_in_dir(checkpoint_path, mode)
     if model:
         return model
         
@@ -78,7 +99,7 @@ def find_latest_model(checkpoint_dir: str | Path) -> str | None:
         
     latest_run_dir = max(run_dirs)[1]
     print(f"Searching in latest run directory: {latest_run_dir}")
-    model = _find_models_in_dir(latest_run_dir)
+    model = _find_models_in_dir(latest_run_dir, mode)
     
     if not model:
         print("No models found in the latest run directory!")
@@ -135,8 +156,7 @@ def setup_run_dir(config) -> Path:
     run_path.mkdir(parents=True, exist_ok=True)
     
     # Save as YAML
-    config_dict = asdict(config) if hasattr(config, '__dataclass_fields__') else vars(config)
     with open(run_path / "config.yaml", "w") as f:
-        yaml.safe_dump(config_dict, f, default_flow_style=False)
+        yaml.safe_dump(vars(config), f, default_flow_style=False)
     
     return run_path
