@@ -1,6 +1,46 @@
 import Box2D
 from Box2D.b2 import vec2, polygonShape
 import math
+import numpy as np
+import random
+
+class Particle:
+    def __init__(self, pos, velocity, color=(128, 128, 128), lifetime=0.5):
+        self.x, self.y = pos
+        self.vx, self.vy = velocity
+        self.color = color
+        self.lifetime = lifetime
+        self.age = 0.0
+        self.size = random.randint(4, 8)
+        self.alpha = 255
+        
+    def update(self, dt):
+        self.x += self.vx * dt
+        self.y += self.vy * dt
+        self.age += dt
+        self.alpha = int(255 * (1 - self.age / self.lifetime))
+        self.size = max(1, self.size - dt * 4)
+        
+    def is_alive(self):
+        return self.age < self.lifetime
+
+class SkidMark:
+    def __init__(self, pos, lifetime=2.0):
+        self.x, self.y = pos
+        self.lifetime = lifetime
+        self.age = 0.0
+        self.alpha = 255
+        self.width = 4  # Width of skid mark
+
+    def update(self, dt):
+        self.age += dt
+        # Fade out gradually in the last 0.5 seconds
+        fade_start = self.lifetime - 0.5
+        if self.age > fade_start:
+            self.alpha = int(255 * (1 - (self.age - fade_start) / 0.5))
+        
+    def is_alive(self):
+        return self.age < self.lifetime
 
 class Car:
     def __init__(self, world, position, angle=0):
