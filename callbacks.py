@@ -28,7 +28,7 @@ class SaveOnBestTrainingRewardCallback(BaseCallback):
         if self.n_calls % self.check_freq == 0:
             if len(self.model.ep_info_buffer) > 0:
                 ep_info_buffer = list(self.model.ep_info_buffer)
-                last_episodes = ep_info_buffer[-min(50, len(ep_info_buffer)):]
+                last_episodes = ep_info_buffer[-min(60, len(ep_info_buffer)):]
                 ep_rew_mean = np.mean([ep_info["r"] for ep_info in last_episodes])
 
                 if self.verbose > 1:

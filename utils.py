@@ -1,8 +1,9 @@
-import json
 import yaml
 from pathlib import Path
 from dataclasses import asdict
 from typing import Literal
+from racing_env import RacingEnv
+
 
 def _find_models_in_dir(dir_path: Path, mode: Literal["best", "last"]) -> str | None:
     """
@@ -151,12 +152,30 @@ def setup_run_dir(config) -> Path:
                 current += 1
             run_name = f"{current:02d}-{name}"
             run_path = log_path / run_name
-            print(f"Run directory already exists. Using new name: {run_name}")
     
+    print(f"Starting new training run in {run_path}")
     run_path.mkdir(parents=True, exist_ok=True)
     
     # Save as YAML
-    with open(run_path / "config.yaml", "w") as f:
-        yaml.safe_dump(vars(config), f, default_flow_style=False)
+    # with open(run_path / "config.yaml", "w") as f:
+    #     yaml.safe_dump(vars(config), f, default_flow_style=False)
     
     return run_path
+
+def make_env(rank):
+    """
+    Utility function for multiprocessed env.
+    """
+    def _init():
+        env = RacingEnv()
+        return env
+    return _init
+
+def load_model_weights(model, weights_path):
+    if weights_path:
+        try:
+            print(f"Using weights from: {weights_path}")
+            model.set_parameters(weights_path)
+        except Exception as e:
+            print(f"Failed to load weights from {weights_path}: {str(e)}")
+            print("Starting with fresh weights instead.")
