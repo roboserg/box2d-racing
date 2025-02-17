@@ -33,7 +33,7 @@ class RacingEnv(gym.Env):
         self.car_touched_boundary = False
         self.speed_history = []
         self.SPEED_HISTORY_LENGTH = 200
-        self.SPEED_THRESHOLD = 0.1  # Consider car stationary if speed is below this
+        self.SPEED_THRESHOLD = 1 # Consider car stationary if speed is below this
         
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
@@ -106,7 +106,10 @@ class RacingEnv(gym.Env):
         reward = self._calculate_reward()
         self.cumulative_reward += reward
 
-        return obs, reward, self._is_terminated(), False, {}
+        terminated = self._is_terminated()
+        truncated = self.step_count >= self.max_steps
+
+        return obs, reward, terminated, truncated, {}
 
     def _calculate_reward(self):
         reward = self.car.get_linear_velocity() / 1000
@@ -116,7 +119,7 @@ class RacingEnv(gym.Env):
 
     def _is_terminated(self):
         # Check regular termination conditions
-        if self.step_count >= self.max_steps or self.car_touched_boundary:
+        if self.car_touched_boundary:
             return True
             
         # Check if car has been stationary

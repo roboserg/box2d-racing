@@ -13,12 +13,12 @@ This repository contains a custom racing environment built using the Box2D physi
 
 ## TODO List
 
+- [X] Implement proper truncated vs terminated distinction
 - [ ] Add multiprocessing vectorized environment support for faster training ([sb3 docs](https://stable-baselines3.readthedocs.io/en/master/guide/vec_envs.html))
-- [ ] Include time/step count in observations ([Time Limit paper](https://arxiv.org/pdf/1712.00378))
-- [ ] Implement proper truncated vs terminated distinction
 - [ ] Add Cross-Q learning support ([arXiv paper](https://arxiv.org/pdf/1902.05605))
 - [ ] Add TQC support ([arXiv paper](https://arxiv.org/pdf/2005.042699))
-- [ ] Add more rays for better observation
+- [ ] Make number of rays be configurable
+- [ ] Include time/step count in observations ([Time Limit paper](https://arxiv.org/pdf/1712.00378))
 
 ## Getting Started
 
