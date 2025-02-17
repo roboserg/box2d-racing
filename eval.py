@@ -75,7 +75,7 @@ def evaluate(run_dir, n_episodes=10):
         if episode_completed:  # Record stats for completed episodes (including failures)
             rewards.append(total_reward)
             episode_lengths.append(steps)
-            print(f"Episode {episode + 1}: Reward = {total_reward:.2f}, Steps = {steps}")
+            if rewards: print(f"Ep {episode+1:3d}: R={total_reward:7.1f}, S={steps:4d} | Mean={np.mean(rewards):7.1f}, Min={np.min(rewards):7.1f}, Max={np.max(rewards):7.1f}")
     
     if rewards:  # Only print stats if we have data
         print(f"\nEvaluation Results after {n_episodes} episodes:")

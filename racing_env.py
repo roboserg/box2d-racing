@@ -105,7 +105,7 @@ class RacingEnv(gym.Env):
         obs = self._get_observation()
         reward = self._calculate_reward()
         self.cumulative_reward += reward
-        
+
         return obs, reward, self._is_terminated(), False, {}
 
     def _calculate_reward(self):

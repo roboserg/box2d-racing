@@ -157,7 +157,7 @@ class Renderer:
         # Create ray surface
         ray_surface = pygame.Surface((self.SCREEN_WIDTH, self.SCREEN_HEIGHT), pygame.SRCALPHA)
         for endpoint in endpoints:
-            pygame.draw.line(ray_surface, (255, 0, 0, 64), car_pos_screen, endpoint, 2)
+            pygame.draw.line(ray_surface, (0, 255, 0, 64), car_pos_screen, endpoint, 2)
         surfaces_to_blit.append((ray_surface, (0, 0)))
         
         if show_ray_distances:
@@ -326,7 +326,7 @@ class Renderer:
         self.screen.blit(skid_surface, (0, 0))
         
         # Draw track
-        pygame.draw.lines(self.screen, self.WHITE, True,
+        pygame.draw.lines(self.screen, self.BLACK, True,
                          [self.to_screen(p) for p in outer_track], 5)
         pygame.draw.lines(self.screen, self.BLACK, True,
                          [self.to_screen(p) for p in inner_track], 5)
@@ -347,17 +347,30 @@ class Renderer:
         # Draw car body
         pygame.draw.polygon(self.screen, self.RED, vertices)
         
-        # Draw front indicator
-        front_center = (
-            car_pos[0] + 0.6 * np.cos(car_angle),
-            car_pos[1] + 0.6 * np.sin(car_angle)
+        # Draw front indicator line
+        front_start = (
+            car_pos[0] + 0.4 * np.cos(car_angle),
+            car_pos[1] + 0.4 * np.sin(car_angle)
         )
-        pygame.draw.circle(self.screen, self.WHITE, self.to_screen(front_center), 3)
+        front_end = (
+            car_pos[0] + 0.9 * np.cos(car_angle),
+            car_pos[1] + 0.9 * np.sin(car_angle)
+        )
+        pygame.draw.line(self.screen, self.BLACK, 
+                        self.to_screen(front_start), 
+                        self.to_screen(front_end), 
+                        4)
 
         # Draw rays
         ray_surfaces = self._render_rays(car_pos, ray_endpoints, show_ray_distances)
         for surface, pos in ray_surfaces:
             self.screen.blit(surface, pos)
+            
+        # Draw black circles at ray endpoints
+        if ray_endpoints:
+            for endpoint in ray_endpoints:
+                screen_pos = self.to_screen(endpoint)
+                pygame.draw.circle(self.screen, self.GREEN, screen_pos, 3)
 
         # Draw particles
         particle_surface = pygame.Surface((self.SCREEN_WIDTH, self.SCREEN_HEIGHT), pygame.SRCALPHA)
