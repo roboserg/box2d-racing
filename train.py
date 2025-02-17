@@ -8,50 +8,49 @@ from config import Config
 
 
 def train():
-    config = Config()
-    run_dir = setup_run_dir(config)
+    run_dir = setup_run_dir(Config)
     env, eval_env = Monitor(RacingEnv()), Monitor(RacingEnv())
     
-    model = PPO(
+    model = SAC(
         "MlpPolicy",
         env,
-        learning_rate=linear_schedule(config.LEARNING_RATE),
-        gamma=config.GAMMA,
-        use_sde=True,
+        learning_rate=linear_schedule(Config.LEARNING_RATE),
+        gamma=Config.GAMMA,
+        use_sde=Config.USE_SDE,
         tensorboard_log=run_dir,
         device="cpu",
-        policy_kwargs=dict(net_arch=dict(pi=[256, 256], vf=[256, 256]))
+        policy_kwargs=dict(net_arch=[256, 256])
     )
 
     print(f"Starting new training run in {run_dir}")
-    if config.RESUME_FROM:
+    if Config.RESUME_FROM:
         try:
-            print(f"Using weights from: {config.RESUME_FROM}")
-            model.set_parameters(config.RESUME_FROM)
+            print(f"Using weights from: {Config.RESUME_FROM}")
+            model.set_parameters(Config.RESUME_FROM)
         except Exception as e:
-            print(f"Failed to load weights from {config.RESUME_FROM}: {str(e)}")
+            print(f"Failed to load weights from {Config.RESUME_FROM}: {str(e)}")
             print("Starting with fresh weights instead.")
      
     callbacks = [
         EvalCallback(
             eval_env,
-            eval_freq=config.EVAL_FREQ,
-            n_eval_episodes=config.EVAL_EPISODES,
+            eval_freq=Config.EVAL_FREQ,
+            n_eval_episodes=Config.EVAL_EPISODES,
             render=True,
         ),
         SaveOnBestTrainingRewardCallback(
-            check_freq=config.CHECK_FREQ,
+            check_freq=Config.CHECK_FREQ,
             save_path=run_dir,
-            keep_n_models=config.KEEP_N_MODELS
+            keep_n_models=Config.KEEP_N_MODELS
         ),
         SaveLatestCallback(
-            save_freq=config.EVAL_FREQ,
+            save_freq=Config.EVAL_FREQ,
             save_path=run_dir
         )
     ]
     
     model.learn(
-        total_timesteps=config.TOTAL_TIMESTEPS, 
+        total_timesteps=Config.TOTAL_TIMESTEPS, 
         progress_bar=True, 
         callback=callbacks, 
         tb_log_name="run"
