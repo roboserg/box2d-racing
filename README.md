@@ -40,4 +40,4 @@ This repository contains a custom racing environment built using the Box2D physi
 
 ## Roadmap
 
-{% include_relative TODO.md %}
+See [TODO](TODO.md) for planned features and improvements.
